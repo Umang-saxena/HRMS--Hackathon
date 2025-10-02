@@ -7,7 +7,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def google_oauth():
     try:
         response = supabase.auth.sign_in_with_oauth(
-            {"provider": "google", "options": {"redirect_to": "http://localhost:3000/auth/callback"}}
+            {"provider": "google", "options": {"redirect_to": "http://localhost:3000/callback"}}
         )
         return {"url": response.url}
     except Exception as e:
