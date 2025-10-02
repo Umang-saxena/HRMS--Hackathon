@@ -1,17 +1,22 @@
 from fastapi import FastAPI
-from .supabase_client import supabase
+from fastapi.middleware.cors import CORSMiddleware
+from app.routes import auth  # import the auth router
 
+app = FastAPI()
 
-app = FastAPI(title="HRMS backend", version="1.0.0")
+# CORS settings
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include routers
-# app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-# app.include_router(user.router, prefix="/api/v1/users", tags=["users"])
 
 @app.get("/")
-def root():
-    return {"message": "Hello from FastAPI Server"}
-
+def read_root():
+    return {"message": "Welcome to the HRMS API"}
 
 @app.get("/test-supabase")
 def test_supabase():
@@ -20,3 +25,6 @@ def test_supabase():
     #     return {"error": response.error.message}
     # return {"data": response.data}
     return {"message": "Supabase client is set up correctly"}
+
+
+app.include_router(auth.router)
