@@ -1,3 +1,6 @@
+
+import Link from "next/link";
+
 import Image from "next/image";
 
 export default function Home() {
@@ -22,6 +25,14 @@ export default function Home() {
           </li>
           <li className="tracking-[-.01em]">
             Save and see your changes instantly.
+          </li>
+          <li className="tracking-[-.01em]">
+            <Link
+              href="/login"
+              className="text-blue-600 hover:underline"
+            >
+              Go to Login Page
+            </Link>
           </li>
         </ol>
 
