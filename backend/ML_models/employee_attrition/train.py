@@ -10,18 +10,27 @@ from sklearn.metrics import (
     f1_score, recall_score
 )
 
+
 # --------------------------
-# Data Loading
+# Step 1: Load & Split Data
 # --------------------------
-def load_data(path):
+def load_data(path: str):
+    """Loads CSV dataset."""
     return pd.read_csv(path)
 
+
 def split_features_target(df, target_col="Attrition", drop_cols=["EmployeeID"]):
+    """Separates feature matrix (X) and target (y)."""
     X = df.drop(columns=drop_cols + [target_col])
     y = df[target_col]
     return X, y
 
+
+# --------------------------
+# Step 2: Preprocessing
+# --------------------------
 def build_preprocessor(X, categorical_features):
+    """Creates preprocessing pipeline for categorical and numerical data."""
     numerical_features = X.select_dtypes(include=["int64", "float64"]).columns
     preprocessor = ColumnTransformer([
         ("num", "passthrough", numerical_features),
@@ -29,10 +38,12 @@ def build_preprocessor(X, categorical_features):
     ])
     return preprocessor, numerical_features
 
+
 # --------------------------
-# Model & Hyperparameter Tuning
+# Step 3: Model & Hyperparameter Tuning
 # --------------------------
 def tune_model(preprocessor, scale_pos_weight, X_train, y_train):
+    """Tunes XGBoost model with RandomizedSearchCV for best performance."""
     pipeline = Pipeline(steps=[
         ("preprocessor", preprocessor),
         ("classifier", xgb.XGBClassifier(
@@ -70,19 +81,23 @@ def tune_model(preprocessor, scale_pos_weight, X_train, y_train):
     print(search.best_params_)
     return search.best_estimator_
 
+
 # --------------------------
-# Training & Threshold Search
+# Step 4: Train & Find Best Threshold
 # --------------------------
 def train_and_find_threshold(model, X, y, thresholds=[0.3, 0.35, 0.4, 0.5], optimize_for="f1"):
+    """Trains model, evaluates different probability thresholds, and selects the best one."""
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # Hyperparameter tuning
-    model = tune_model(model.named_steps["preprocessor"], 
-                       (y == 0).sum() / (y == 1).sum(),
-                       X_train, y_train)
+    # Handle imbalance
+    scale_pos_weight = (y == 0).sum() / (y == 1).sum()
 
+    # Tune model
+    model = tune_model(model.named_steps["preprocessor"], scale_pos_weight, X_train, y_train)
+
+    # Predict probabilities
     y_proba = model.predict_proba(X_test)[:, 1]
 
     best_score, best_threshold = -1, 0.5
@@ -102,24 +117,30 @@ def train_and_find_threshold(model, X, y, thresholds=[0.3, 0.35, 0.4, 0.5], opti
         acc = accuracy_score(y_test, y_pred)
         f1_val = f1_score(y_test, y_pred)
         roc = roc_auc_score(y_test, y_proba)
+
         print(f"\nThreshold {t}: Accuracy={acc:.4f}, F1={f1_val:.4f}, ROC-AUC={roc:.4f}")
         print(classification_report(y_test, y_pred))
 
     print(f"\n🔥 Best Threshold = {best_threshold} (Optimized for {optimize_for.upper()}, Score={best_score:.4f})")
     return model, best_threshold
 
+
 # --------------------------
-# Main Execution
+# Step 5: Main Execution
 # --------------------------
 def main():
-    df = load_data("data/synthetic_employee_data_final.csv")
+    """Main training function for HR Attrition Model."""
+    df = load_data("C:\\Users\\PRATHAM\\OneDrive\\Desktop\\HRMS--Hackathon\\backend\\ML_models\\employee_attrition\\data\\synthetic_employee_data_final.csv")
     X, y = split_features_target(df)
 
+    # Updated categorical columns (based on cleaned dataset)
     categorical_features = ["Department", "JobRole", "Gender", "MaritalStatus"]
 
+    # Build preprocessing pipeline
     preprocessor, _ = build_preprocessor(X, categorical_features)
     scale_pos_weight = (y == 0).sum() / (y == 1).sum()
 
+    # Base model
     dummy_model = Pipeline(steps=[
         ("preprocessor", preprocessor),
         ("classifier", xgb.XGBClassifier(
@@ -130,11 +151,27 @@ def main():
         ))
     ])
 
+    # Train and find best decision threshold
     trained_model, best_threshold = train_and_find_threshold(dummy_model, X, y)
 
-    joblib.dump({"model": trained_model, "threshold": best_threshold},
-                "models/xgb_attrition_synthetic.joblib")
-    print("✅ Model saved at models/xgb_attrition_synthetic.joblib")
+    # Display top features (from trained model)
+    try:
+        feature_names = trained_model.named_steps["preprocessor"].get_feature_names_out()
+        importances = trained_model.named_steps["classifier"].feature_importances_
+        top_indices = importances.argsort()[-10:][::-1]
+        print("\n📊 Top 10 Important Features:")
+        for idx in top_indices:
+            print(f"{feature_names[idx]}: {importances[idx]:.4f}")
+    except Exception:
+        print("\nCould not extract feature importances (possible version mismatch).")
+
+    # Save final model
+    joblib.dump(
+        {"model": trained_model, "threshold": best_threshold},
+        "C:\\Users\\PRATHAM\\OneDrive\\Desktop\\HRMS--Hackathon\\backend\\ML_models\\employee_attrition\\models\\attrition.joblib"
+    )
+    print("\n Model saved at models/attrition.joblib")
+
 
 if __name__ == "__main__":
     main()
