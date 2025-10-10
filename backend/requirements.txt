@@ -2,3 +2,15 @@ fastapi[standard]==0.113.0
 pydantic==2.8.0
 supabase
 uvicorn[standard]==0.24.0
+pandas 
+numpy
+scikit-learn
+xgboost
+matplotlib
+seaborn
+joblib
+requests 
+langchain
+langchain-groq
+sentence_transformers
+pymupdf
