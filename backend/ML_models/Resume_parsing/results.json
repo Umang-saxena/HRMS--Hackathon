@@ -1,0 +1,23 @@
+{
+    "status": "success",
+    "latency_seconds": 1.47,
+    "job_description_cached": true,
+    "top_candidates": [
+        {
+            "candidate_name": "MISHIKA GOYAL",
+            "match_score": "80",
+            "key_strengths": "PyTorch, data preprocessing, CNNs, transformers, model optimization, cloud deployment",
+            "missing_skills": "MLOps, vector databases",
+            "summary": "A recent CSE graduate with experience in building AI-driven classification systems and real-time posture classification models using PyTorch, with strong knowledge of data preprocessing and model optimization, but lacking experience in MLOps and vector databases.",
+            "rank": 1
+        },
+        {
+            "candidate_name": "Pratham Kothari",
+            "match_score": "80",
+            "key_strengths": "PyTorch, NumPy, Pandas, Scikit-Learn, PowerBI, Hugging Face, LangChain, Airflow, PySpark, MlFlow",
+            "missing_skills": "MLOps, Cloud Deployment, Vector Databases",
+            "summary": "Experienced data science and AI engineer with skills in PyTorch, Python, and data preprocessing.",
+            "rank": 2
+        }
+    ]
+}
