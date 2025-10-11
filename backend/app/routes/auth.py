@@ -62,6 +62,12 @@ def hr_only(current = Depends(get_current_user)):
 def employee_only(current = Depends(get_current_user)):
     return {"message": "Employee access", "role": current['role']}
 
+@router.get("/candidate-only")
+def candidate_only(current = Depends(get_current_user)):
+    if current['role'] != 'candidate':
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return {"message": "Candidate access"}
+
 
 @router.post("/signup")
 def signup(user: UserSignup):

@@ -6,7 +6,7 @@ export default function LoginPage() {
     const [isLogin, setIsLogin] = useState(true)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [role, setRole] = useState('employee')
+    const [role, setRole] = useState('candidate')
     const [loading, setLoading] = useState(false)
 
     const handleEmailAuth = async (e: React.FormEvent) => {
@@ -102,6 +102,7 @@ export default function LoginPage() {
                                 <option value="employee">Employee</option>
                                 <option value="hr">HR</option>
                                 <option value="admin">Admin</option>
+                                <option value="candidate">Candidate</option>
                             </select>
                         </div>
                     )}

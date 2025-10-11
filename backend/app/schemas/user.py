@@ -10,11 +10,12 @@ class Role(str, Enum):
     employee = "employee"
     hr = "hr"
     admin = "admin"
+    candidate = "candidate"
 
 class UserSignup(BaseModel):
     email: str
     password: str
-    role: Optional[Role] = Role.employee
+    role: Optional[Role] = Role.candidate
 
 class AuthResponse(BaseModel):
     user: dict
