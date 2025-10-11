@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-from app.routes import auth, hr  # import the auth and hr routers
+from app.routes import auth, hr, public  # import the auth, hr, and public routers
 
 app = FastAPI()
 
@@ -34,3 +34,4 @@ def test_supabase():
 
 app.include_router(auth.router)
 app.include_router(hr.router)
+app.include_router(public.router)
