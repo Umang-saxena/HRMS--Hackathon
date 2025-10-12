@@ -1,131 +1,282 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
+import { UserRole } from "@/lib/supabase";
+import { Loader2, Briefcase } from "lucide-react";
 
-export default function LoginPage() {
-    const [isLogin, setIsLogin] = useState(true)
-    const [email, setEmail] = useState('')
-    const [password, setPassword] = useState('')
-    const [loading, setLoading] = useState(false)
+export default function Auth() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<UserRole>("candidate");
+  const [loading, setLoading] = useState(false);
 
-    const handleEmailAuth = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setLoading(true)
-        try {
-            const endpoint = isLogin ? '/auth/login' : '/auth/signup'
-            const response = await fetch(`http://localhost:8000${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password }),
-            })
-            const data = await response.json()
-            if (response.ok) {
-                alert(isLogin ? 'Login successful!' : 'Signup successful!')
-                // Handle success, e.g., store session, redirect
-            } else {
-                alert('Error: ' + (data.detail || 'Unknown error'))
-            }
-        } catch (error) {
-            alert('Failed to authenticate')
-        } finally {
-            setLoading(false)
-        }
+  const { signIn, signUp, user } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [user, router]);
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { error } = await signIn(email, password);
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Error signing in",
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "You have successfully signed in.",
+        });
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error signing in",
+        description: err?.message || "An unexpected error occurred.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (!fullName.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation error",
+        description: "Please enter your full name.",
+      });
+      setLoading(false);
+      return;
     }
 
-    const handleGoogleLogin = async () => {
-        setLoading(true)
-        try {
-            const response = await fetch('http://localhost:8000/auth/google')
-            const data = await response.json()
-            if (response.ok && data.url) {
-                window.location.href = data.url
-            } else {
-                alert('Error: ' + (data.error || 'Failed to initiate login'))
-            }
-        } catch (error) {
-            alert('Failed to initiate login')
-        } finally {
-            setLoading(false)
-        }
-    }
+    try {
+      const { error } = await signUp(email, password, fullName, role);
 
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="max-w-md w-full space-y-8">
-                <div>
-                    <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                        {isLogin ? 'Sign in to your account' : 'Create your account'}
-                    </h2>
-                </div>
-                <form className="mt-8 space-y-6" onSubmit={handleEmailAuth}>
-                    <div className="rounded-md shadow-sm -space-y-px">
-                        <div>
-                            <label htmlFor="email" className="sr-only">Email address</label>
-                            <input
-                                id="email"
-                                name="email"
-                                type="email"
-                                required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Email address"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">Password</label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                        >
-                            {loading ? 'Processing...' : (isLogin ? 'Sign in' : 'Sign up')}
-                        </button>
-                    </div>
-                </form>
-                <div className="text-center">
-                    <button
-                        onClick={() => setIsLogin(!isLogin)}
-                        className="text-indigo-600 hover:text-indigo-500"
-                    >
-                        {isLogin ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
-                    </button>
-                </div>
-                <div className="mt-6">
-                    <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-gray-300" />
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                            <span className="px-2 bg-gray-50 text-gray-500">Or continue with</span>
-                        </div>
-                    </div>
-                    <div className="mt-6">
-                        <button
-                            onClick={handleGoogleLogin}
-                            disabled={loading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                        >
-                            {loading ? 'Redirecting...' : 'Sign in with Google'}
-                        </button>
-                    </div>
-                </div>
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Error creating account",
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: "Account created!",
+          description: "Please check your email to verify your account.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error creating account",
+        description: err?.message || "An unexpected error occurred.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen">
+      {/* Left side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-hero items-center justify-center p-12">
+        <div className="max-w-md text-white">
+          <div className="flex items-center gap-3 mb-6">
+            <Briefcase className="h-12 w-12" />
+            <h1 className="text-4xl font-bold">RecruitPro</h1>
+          </div>
+          <p className="text-xl mb-8">
+            Streamline your recruitment process with AI-powered candidate matching,
+            video interviews, and intelligent resume parsing.
+          </p>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                ✓
+              </div>
+              <p>AI-powered resume parsing and candidate matching</p>
             </div>
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                ✓
+              </div>
+              <p>Video interview recording and transcription</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                ✓
+              </div>
+              <p>Collaborative hiring workflows for your team</p>
+            </div>
+          </div>
         </div>
-    )
+      </div>
+
+      {/* Right side - Auth Forms */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="lg:hidden flex items-center gap-2 mb-4">
+              <Briefcase className="h-8 w-8 text-primary" />
+              <span className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                RecruitPro
+              </span>
+            </div>
+            <CardTitle className="text-2xl">Welcome</CardTitle>
+            <CardDescription>
+              Sign in to your account or create a new one to get started
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="signin" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="signin">
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <Input
+                      id="signin-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-password">Password</Label>
+                    <Input
+                      id="signin-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign In"
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="signup">
+                <form onSubmit={handleSignUp} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-name">Full Name</Label>
+                    <Input
+                      id="signup-name"
+                      type="text"
+                      placeholder="John Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input
+                      id="signup-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-role">I am a...</Label>
+                    <Select
+                      value={role}
+                      onValueChange={(value: UserRole) => setRole(value)}
+                    >
+                      <SelectTrigger id="signup-role">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="candidate">Candidate</SelectItem>
+                        <SelectItem value="employee">Employee</SelectItem>
+                        <SelectItem value="interviewer">Interviewer</SelectItem>
+                        <SelectItem value="hr">HR Manager</SelectItem>
+                        <SelectItem value="admin">Administrator</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating account...
+                      </>
+                    ) : (
+                      "Create Account"
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }
