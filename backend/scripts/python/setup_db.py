@@ -1,0 +1,1 @@
+# Write a pyton logic to create tables in a database
