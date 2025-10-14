@@ -10,7 +10,8 @@ import {
   Brain,
   Calendar,
   Building2,
-  Bot
+  Bot,
+  Shield
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'AI Insights', href: '/insights', icon: Brain },
   { name: 'Attendance', href: '/attendance', icon: Calendar },
   { name: 'AI Assistant', href: '/assistant', icon: Bot },
+  { name: 'Test Auth', href: '/test', icon: Shield },
 ];
 
 export default function Sidebar() {
