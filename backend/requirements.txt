@@ -14,3 +14,11 @@ langchain
 langchain-groq
 sentence_transformers
 pymupdf
+openai-whisper 
+librosa 
+pyannote.audio 
+soundfile 
+torch 
+torchaudio 
+supabase
+celery[redis]

@@ -2,7 +2,7 @@ import os
 import json
 import time
 from typing import List, Dict, Any
-import pymupdf  # modern import (formerly fitz)
+import pymupdf  
 from sentence_transformers import SentenceTransformer, util
 from langchain_groq import ChatGroq
 from langchain.prompts import PromptTemplate
