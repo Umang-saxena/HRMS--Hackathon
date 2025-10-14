@@ -1,91 +1,98 @@
-// Re-export the auto-generated Supabase client from Lovable Cloud
-export { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
 
-// Database Types (extend as needed based on your Supabase schema)
-export type UserRole = 'admin' | 'hr' | 'interviewer' | 'candidate' | 'employee';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export interface Profile {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export type Department = {
   id: string;
-  email: string;
-  full_name: string;
-  avatar_url?: string;
+  name: string;
+  description: string | null;
+  manager_id: string | null;
+  budget: number;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface UserRoleRecord {
+export type Employee = {
   id: string;
-  user_id: string;
-  role: UserRole;
+  user_id: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  department_id: string | null;
+  position: string;
+  hire_date: string;
+  salary: number | null;
+  status: 'active' | 'on_leave' | 'terminated';
+  profile_image_url: string | null;
   created_at: string;
-}
+  updated_at: string;
+};
 
-export interface JobPosting {
+export type LearningCourse = {
   id: string;
   title: string;
-  department: string;
-  location: string;
-  employment_type: string;
-  description: string;
-  requirements: string[];
-  responsibilities: string[];
-  salary_range?: string;
-  status: 'draft' | 'open' | 'closed';
-  created_by: string;
+  description: string | null;
+  category: 'technical' | 'soft_skills' | 'leadership' | 'compliance';
+  level: 'beginner' | 'intermediate' | 'advanced';
+  duration_hours: number;
+  instructor: string | null;
+  thumbnail_url: string | null;
+  ai_recommended: boolean;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface Application {
+export type EmployeeCourse = {
   id: string;
-  job_id: string;
-  candidate_id: string;
-  resume_url: string;
-  cover_letter?: string;
-  status: 'applied' | 'screening' | 'interview' | 'shortlisted' | 'rejected' | 'hired';
-  match_score?: number;
+  employee_id: string;
+  course_id: string;
+  enrollment_date: string;
+  completion_date: string | null;
+  progress_percentage: number;
+  status: 'enrolled' | 'in_progress' | 'completed' | 'dropped';
+  score: number | null;
+};
+
+export type PerformanceReview = {
+  id: string;
+  employee_id: string;
+  reviewer_id: string | null;
+  review_period_start: string;
+  review_period_end: string;
+  overall_rating: number | null;
+  technical_skills: number | null;
+  communication: number | null;
+  leadership: number | null;
+  teamwork: number | null;
+  comments: string | null;
+  ai_insights: any;
   created_at: string;
-  updated_at: string;
-}
+};
 
-export interface ParsedResume {
+export type AIInsight = {
   id: string;
-  application_id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  title?: string;
-  summary?: string;
-  skills: string[];
-  experience: Array<{
-    company: string;
-    position: string;
-    duration: string;
-    description: string;
-  }>;
-  education: Array<{
-    institution: string;
-    degree: string;
-    field: string;
-    year: string;
-  }>;
-  parsed_at: string;
-}
-
-export interface Interview {
-  id: string;
-  application_id: string;
-  interviewer_id: string;
-  scheduled_at: string;
-  duration_minutes: number;
-  type: 'phone' | 'video' | 'in-person';
-  status: 'scheduled' | 'completed' | 'cancelled';
-  video_url?: string;
-  transcript?: string;
-  notes?: string;
-  score?: number;
-  sentiment?: string;
-  filler_word_count?: number;
+  insight_type: 'turnover_risk' | 'skill_gap' | 'performance_trend' | 'learning_recommendation';
+  employee_id: string | null;
+  department_id: string | null;
+  title: string;
+  description: string | null;
+  confidence_score: number | null;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  data: any;
+  status: 'new' | 'reviewed' | 'actioned' | 'dismissed';
   created_at: string;
-  updated_at: string;
-}
+};
+
+export type AttendanceLog = {
+  id: string;
+  employee_id: string;
+  date: string;
+  check_in: string | null;
+  check_out: string | null;
+  status: 'present' | 'absent' | 'late' | 'half_day' | 'work_from_home';
+  notes: string | null;
+};
