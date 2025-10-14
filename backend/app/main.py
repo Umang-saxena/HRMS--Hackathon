@@ -6,8 +6,15 @@ import os
 load_dotenv()
 
 from app.routes import auth, hr, public, jobs  # import the auth, hr, public, and jobs routers
+from app.middleware import RateLimitMiddleware, CacheMiddleware
 
 app = FastAPI()
+
+# Add rate limiting middleware (100 requests per minute per IP)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+
+# Add caching middleware (5 minutes TTL)
+app.add_middleware(CacheMiddleware, cache_ttl=300)
 
 # CORS settings
 app.add_middleware(
