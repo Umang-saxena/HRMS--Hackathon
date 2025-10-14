@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.supabase_client import supabase
 from app.schemas.hr import JobCreate, JobResponse, DepartmentCreate, DepartmentResponse
+from app.schemas.job import Job
 from app.routes.auth import get_current_user
 
 router = APIRouter(prefix="/hr", tags=["hr"])
@@ -54,5 +55,18 @@ def create_department(dept: DepartmentCreate, current=Depends(require_hr_role)):
             )
         else:
             raise HTTPException(status_code=400, detail="Failed to create department")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Update Job By JobId
+@router.patch("/jobs/{job_id}")
+def update_job(job_id: str, job: Job, current=Depends(require_hr_role)):
+    try:
+        update_data = job.dict(exclude_unset=True)
+        response = supabase.table("jobs").update(update_data).eq("id", job_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
