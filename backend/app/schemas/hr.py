@@ -4,30 +4,30 @@ from datetime import datetime
 
 class JobCreate(BaseModel):
     title: str
-    department_id: str  # UUID as string
+    department_id: str  # Department ID as string
+    location: str  # Required location
+    employment_type: str  # e.g., 'Full-Time', 'Part-Time', etc.
     description: str
-    location: Optional[str] = None
-    job_type: str  # e.g., 'Full-Time'
-    experience_required: Optional[float] = None
-    skills_required: Optional[List[str]] = None
+    requirements: Optional[List[str]] = []
+    responsibilities: Optional[List[str]] = []
     salary_range: Optional[str] = None
-    openings: Optional[int] = 1
+    experience_required: Optional[str] = None  # Text field as per DB schema
 
 class JobResponse(BaseModel):
     id: str
     title: str
     department_id: str
-    created_by: Optional[str] = None
+    location: str
+    employment_type: str
     description: str
-    location: Optional[str] = None
-    job_type: str
-    experience_required: Optional[float] = None
-    skills_required: Optional[List[str]] = None
+    requirements: List[str]
+    responsibilities: List[str]
     salary_range: Optional[str] = None
-    openings: int
     status: str
+    created_by: str
     created_at: datetime
     updated_at: datetime
+    experience_required: Optional[str] = None
 
 class DepartmentCreate(BaseModel):
     name: str

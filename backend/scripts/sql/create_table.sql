@@ -66,6 +66,9 @@ CREATE TABLE applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
     candidate_id UUID NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    cover_letter TEXT,                       -- candidate's cover letter
+    resume_url TEXT,                         -- URL to candidate's resume
+    additional_info TEXT,                    -- any additional information
     ai_score NUMERIC(5,2),                   -- score from AI screening model
     match_reason TEXT,                       -- optional AI explanation
     screening_status TEXT DEFAULT 'Under Review'
