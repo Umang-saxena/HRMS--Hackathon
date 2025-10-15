@@ -1,6 +1,6 @@
 from functools import wraps
 from typing import Any, Callable
-from fastapi import Request
+from fastapi import Request, HTTPException
 from datetime import datetime
 import json
 from app.redis_client import redis_client
@@ -88,6 +88,9 @@ def cached_endpoint(cache_key_prefix: str, ttl: int = 300):
 
                 return result
 
+            except HTTPException as e:
+                # Re-raise HTTPExceptions without caching
+                raise e
             except Exception as e:
                 print(f"Caching error: {e}")
                 # If caching fails, just execute the function

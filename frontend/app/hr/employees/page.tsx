@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Mail, Phone, Building2, Calendar } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Search, Filter, Mail, Phone, Building2, Calendar, User, DollarSign, MapPin } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,8 @@ export default function EmployeesPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -313,8 +315,8 @@ export default function EmployeesPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      // Navigate to employee profile page
-                      window.location.href = `/hr/employees/${employee.id}`;
+                      setSelectedEmployee(employee);
+                      setIsProfileModalOpen(true);
                     }}
                   >
                     View Profile
@@ -325,6 +327,154 @@ export default function EmployeesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Employee Profile Modal */}
+      <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Employee Profile</DialogTitle>
+            <DialogDescription>
+              Detailed information about {selectedEmployee?.first_name} {selectedEmployee?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEmployee && (
+            <div className="space-y-6">
+              {/* Profile Header */}
+              <div className="flex items-center gap-6">
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={selectedEmployee.profile_image_url || ''} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-2xl">
+                    {selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      {selectedEmployee.first_name} {selectedEmployee.last_name}
+                    </h2>
+                    <Badge className={getStatusColor(selectedEmployee.status)}>
+                      {selectedEmployee.status}
+                    </Badge>
+                  </div>
+                  <p className="text-lg text-slate-600">{selectedEmployee.position}</p>
+                  <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-4 h-4" />
+                      {selectedEmployee.email}
+                    </div>
+                    {selectedEmployee.phone && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-4 h-4" />
+                        {selectedEmployee.phone}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      Joined {new Date(selectedEmployee.hire_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Employment Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="w-5 h-5" />
+                      Employment Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Employee ID</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.id}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Position</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.position}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Department</label>
+                      <p className="text-sm text-slate-900">
+                        {(selectedEmployee as any).departments?.name || 'Not assigned'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Status</label>
+                      <Badge className={getStatusColor(selectedEmployee.status)}>
+                        {selectedEmployee.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Hire Date</label>
+                      <p className="text-sm text-slate-900">
+                        {new Date(selectedEmployee.hire_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {selectedEmployee.salary && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Salary</label>
+                        <p className="text-sm text-slate-900">
+                          ${selectedEmployee.salary.toLocaleString()}/year
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Contact Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Phone className="w-5 h-5" />
+                      Contact Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Email</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.email}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Phone</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.phone || 'Not provided'}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Additional Information */}
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5" />
+                      Additional Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Created At</label>
+                        <p className="text-sm text-slate-900">
+                          {new Date(selectedEmployee.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Last Updated</label>
+                        <p className="text-sm text-slate-900">
+                          {new Date(selectedEmployee.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
