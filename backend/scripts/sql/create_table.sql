@@ -1,7 +1,21 @@
-CREATE TABLE departments (
+CREATE TABLE companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    description TEXT,
+    address TEXT,
+    phone TEXT,
+    email TEXT,
+    website TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE departments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    company_id UUID REFERENCES companies(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(name, company_id)
 );
 
 CREATE TABLE employees (

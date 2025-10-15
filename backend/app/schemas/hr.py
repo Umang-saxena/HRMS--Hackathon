@@ -31,8 +31,10 @@ class JobResponse(BaseModel):
 
 class DepartmentCreate(BaseModel):
     name: str
+    company_id: str
 
 class DepartmentResponse(BaseModel):
     id: str
     name: str
+    company_id: str
     created_at: datetime

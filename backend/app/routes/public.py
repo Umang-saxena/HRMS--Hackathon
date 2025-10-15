@@ -12,12 +12,12 @@ router = APIRouter(prefix="", tags=["public"])
 
 
 @router.get("/departments")
-@cached_endpoint("departments", ttl=300)
+# @cached_endpoint("departments", ttl=300)
 def get_departments():
     try:
-        response = supabase.table('departments').select('name').execute()
+        response = supabase.table('departments').select('name',"company_id").execute()
         departments = response.data
         department_names = [dept['name'] for dept in departments]
-        return {"departments": department_names}
+        return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
