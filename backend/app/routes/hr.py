@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.supabase_client import supabase
 from app.schemas.hr import JobCreate, JobResponse, DepartmentCreate, DepartmentResponse
-from app.schemas.company import CompanyCreate, CompanyResponse, EmployeeResponse
+from app.schemas.company import CompanyCreate, CompanyResponse, EmployeeResponse, EmployeeCreate
 from app.schemas.job import Job
 from app.routes.auth import get_current_user
 
@@ -96,6 +96,45 @@ def get_companies(current=Depends(require_hr_role)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/companies/{company_id}/employees", response_model=EmployeeResponse)
+def add_employee_to_company(company_id: str, employee: EmployeeCreate, current=Depends(require_hr_role)):
+    try:
+        # First verify company exists
+        company_response = supabase.table('companies').select('*').eq('id', company_id).execute()
+        if not company_response.data:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Verify department exists and belongs to the company
+        dept_response = supabase.table('departments').select('*').eq('id', employee.department_id).eq('company_id', company_id).execute()
+        if not dept_response.data:
+            raise HTTPException(status_code=400, detail="Department not found or does not belong to this company")
+
+        # Verify company_id matches the URL parameter
+        if employee.company_id != company_id:
+            raise HTTPException(status_code=400, detail="Company ID in request body must match the company ID in URL")
+
+        # Check if employee with this email already exists
+        existing_employee = supabase.table('employees').select('*').eq('email', employee.email).execute()
+        if existing_employee.data:
+            raise HTTPException(status_code=400, detail="Employee with this email already exists")
+
+        # Create employee
+        employee_data = employee.dict()
+        # Set date_of_joining to current date if not provided
+        if not employee_data.get('date_of_joining'):
+            from datetime import datetime
+            employee_data['date_of_joining'] = datetime.now().date().isoformat()
+        response = supabase.table('employees').insert(employee_data).execute()
+        if response.data and len(response.data) > 0:
+            created_employee = response.data[0]
+            return EmployeeResponse(**created_employee)
+        else:
+            raise HTTPException(status_code=400, detail="Failed to create employee")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add employee: {str(e)}")
+
 @router.get("/companies/{company_id}/employees", response_model=list[EmployeeResponse])
 def get_employees_by_company(company_id: str, current=Depends(require_hr_role)):
     try:
@@ -104,14 +143,13 @@ def get_employees_by_company(company_id: str, current=Depends(require_hr_role)):
         if not company_response.data:
             raise HTTPException(status_code=404, detail="Company not found")
 
-        # Get employees through departments
-        response = supabase.table('employees').select("""
-            *,
-            departments!inner(company_id)
-        """).eq('departments.company_id', company_id).execute()
+        # Get employees directly by company_id
+        response = supabase.table('employees').select('*').eq('company_id', company_id).execute()
 
         return [EmployeeResponse(**employee) for employee in response.data]
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch employees: {str(e)}")
+
+

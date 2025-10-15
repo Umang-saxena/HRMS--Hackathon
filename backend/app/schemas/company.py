@@ -21,6 +21,18 @@ class CompanyResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class EmployeeCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone: Optional[str] = None
+    department_id: str
+    company_id: str
+    role: Optional[str] = None
+    date_of_joining: Optional[str] = None
+    salary: Optional[float] = None
+    employment_status: Optional[str] = "active"
+
 class EmployeeResponse(BaseModel):
     id: str
     first_name: str
@@ -28,6 +40,7 @@ class EmployeeResponse(BaseModel):
     email: str
     phone: Optional[str] = None
     department_id: Optional[str] = None
+    company_id: Optional[str] = None
     role: Optional[str] = None
     date_of_joining: Optional[str] = None
     salary: Optional[float] = None

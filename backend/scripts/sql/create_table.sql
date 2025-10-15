@@ -25,6 +25,7 @@ CREATE TABLE employees (
     email TEXT UNIQUE NOT NULL,
     phone TEXT,
     department_id UUID REFERENCES departments(id),
+    company_id UUID REFERENCES companies(id),
     role TEXT,
     date_of_joining DATE,
     salary NUMERIC(10,2),
