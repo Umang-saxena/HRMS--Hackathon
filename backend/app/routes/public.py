@@ -17,3 +17,16 @@ def get_open_jobs(page: int = 1, limit: int = 10):
         return [JobResponse(**job) for job in jobs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.get("/departments")
+@cached_endpoint("departments", ttl=300)
+def get_departments():
+    try:
+        response = supabase.table('departments').select('name').execute()
+        departments = response.data
+        department_names = [dept['name'] for dept in departments]
+        return {"departments": department_names}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
