@@ -237,3 +237,16 @@ def get_employee_profile(employee_id: str, current=Depends(require_hr_role)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch employee profile: {str(e)}")
 
 
+@router.get("/departments", response_model=list[DepartmentResponse])
+@cached_endpoint("hr_departments")
+def get_departments(company_id: str = None, current=Depends(require_hr_role)):
+    try:
+        query = supabase.table('departments').select('*')
+        
+        if company_id:
+            query = query.eq('company_id', company_id)
+        
+        response = query.execute()
+        return [DepartmentResponse(**dept) for dept in response.data]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch departments: {str(e)}")

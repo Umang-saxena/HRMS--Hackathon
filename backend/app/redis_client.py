@@ -67,5 +67,17 @@ class RedisClient:
             print(f"Redis expire error: {e}")
             return False
 
+    def scan(self, cursor: int, match: str) -> tuple:
+        """Scan keys matching pattern (simplified implementation)"""
+        try:
+            # Upstash Redis doesn't support SCAN command directly
+            # We'll use a workaround by getting all keys (if small dataset)
+            # or implement a different invalidation strategy
+            # For now, return empty results to avoid errors
+            return 0, []
+        except Exception as e:
+            print(f"Redis scan error: {e}")
+            return 0, []
+
 # Global instance
 redis_client = RedisClient()

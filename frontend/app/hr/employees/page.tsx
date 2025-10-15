@@ -48,7 +48,50 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     loadData();
+    loadDepartments();
   }, []);
+
+  async function loadDepartments() {
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error('API request failed');
+      const companiesData = await res.json();
+
+      // Assuming the HR user belongs to the first company or we need to get company_id from user metadata
+      const companyId = session?.user?.user_metadata?.company_id || companiesData[0]?.id;
+
+      if (companyId) {
+        const deptRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/departments?company_id=${companyId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (deptRes.ok) {
+          const departmentsData = await deptRes.json();
+          setDepartments(departmentsData || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching departments:', err);
+      // fallback to Supabase DB query
+      const { data: fallbackData } = await supabase
+        .from('departments')
+        .select('*')
+        .order('name');
+      setDepartments(fallbackData || []);
+    }
+  }
 
   async function loadData() {
     const session = (await supabase.auth.getSession()).data.session;
@@ -79,14 +122,55 @@ export default function EmployeesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const { error } = await supabase.from('employees').insert([
-      {
-        ...formData,
-        salary: formData.salary ? parseFloat(formData.salary) : null,
-      },
-    ]);
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
+    let companyId = session?.user?.user_metadata?.company_id;
 
-    if (!error) {
+    // If company_id not in user metadata, get it from companies API
+    if (!companyId) {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (res.ok) {
+          const companiesData = await res.json();
+          companyId = companiesData[0]?.id;
+        }
+      } catch (err) {
+        console.error('Error fetching company ID:', err);
+        return;
+      }
+    }
+
+    if (!companyId) {
+      console.error('Company ID not found');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies/${companyId}/employees`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          company_id: companyId,
+          salary: formData.salary ? parseFloat(formData.salary) : null,
+          date_of_joining: formData.hire_date,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Failed to add employee');
+      }
+
       setIsDialogOpen(false);
       setFormData({
         first_name: '',
@@ -100,6 +184,9 @@ export default function EmployeesPage() {
         status: 'active',
       });
       loadData();
+    } catch (err) {
+      console.error('Error adding employee:', err);
+      // You might want to show an error message to the user here
     }
   }
 
@@ -129,13 +216,15 @@ export default function EmployeesPage() {
           <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
           <p className="text-slate-600 mt-1">Manage your team members</p>
         </div>
+        <Button
+          onClick={() => setIsDialogOpen(true)}
+          className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Employee
+        </Button>
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Employee
-            </Button>
-          </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Employee</DialogTitle>
