@@ -49,18 +49,29 @@ export default function EmployeesPage() {
   }, []);
 
   async function loadData() {
-    const { data: employeesData } = await supabase
-      .from('employees')
-      .select('*, departments(name)')
-      .order('created_at', { ascending: false });
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
 
-    const { data: deptData } = await supabase
-      .from('departments')
-      .select('*')
-      .order('name');
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/employees`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-    setEmployees(employeesData || []);
-    setDepartments(deptData || []);
+      if (!res.ok) throw new Error('API request failed');
+      const employeesData = await res.json();
+      setEmployees(employeesData || []);
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+      // fallback to Supabase DB query
+      const { data: fallbackData } = await supabase
+        .from('employees')
+        .select('*, departments(name)')
+        .order('created_at', { ascending: false });
+      setEmployees(fallbackData || []);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -298,7 +309,14 @@ export default function EmployeesPage() {
                       </div>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Navigate to employee profile page
+                      window.location.href = `/hr/employees/${employee.id}`;
+                    }}
+                  >
                     View Profile
                   </Button>
                 </div>

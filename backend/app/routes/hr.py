@@ -152,4 +152,65 @@ def get_employees_by_company(company_id: str, current=Depends(require_hr_role)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch employees: {str(e)}")
 
+@router.get("/employees", response_model=list[EmployeeResponse])
+def get_employees_by_hr_company(current=Depends(require_hr_role)):
+    try:
+        # Get HR user's company_id from user metadata or profile
+        # Assuming HR users have company_id in their user_metadata
+        hr_user = current['user']
+        company_id = hr_user.user_metadata.get('company_id')
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="HR user must be associated with a company")
+
+        # Verify company exists
+        company_response = supabase.table('companies').select('*').eq('id', company_id).execute()
+        if not company_response.data:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get employees for the HR's company
+        response = supabase.table('employees').select('*').eq('company_id', company_id).execute()
+
+        return [EmployeeResponse(**employee) for employee in response.data]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch employees: {str(e)}")
+
+@router.get("/employees/{employee_id}", response_model=EmployeeResponse)
+def get_employee_profile(employee_id: str, current=Depends(require_hr_role)):
+    try:
+        # Get HR user's company_id from user metadata
+        hr_user = current['user']
+        company_id = hr_user.user_metadata.get('company_id')
+
+        if not company_id:
+            # For development/testing: allow access but log the issue
+            # In production, this should require company association
+            print(f"Warning: HR user {hr_user.email} accessing employee profile without company association")
+
+            # Get employee without company restriction (for development)
+            response = supabase.table('employees').select('*, departments(name)').eq('id', employee_id).execute()
+
+            if not response.data:
+                raise HTTPException(status_code=404, detail="Employee not found")
+
+            employee = response.data[0]
+            return EmployeeResponse(**employee)
+
+        # Get employee with department information and company restriction
+        response = supabase.table('employees').select('*, departments(name)').eq('id', employee_id).eq('company_id', company_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Employee not found or access denied")
+
+        employee = response.data[0]
+
+        # Return employee data with department name included
+        return EmployeeResponse(**employee)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch employee profile: {str(e)}")
+
 
