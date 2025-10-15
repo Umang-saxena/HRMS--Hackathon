@@ -4,6 +4,7 @@ from app.schemas.hr import JobCreate, JobResponse, DepartmentCreate, DepartmentR
 from app.schemas.company import CompanyCreate, CompanyResponse, EmployeeResponse, EmployeeCreate
 from app.schemas.job import Job
 from app.routes.auth import get_current_user
+from app.decorators import cached_endpoint, invalidate_cache
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
@@ -21,6 +22,8 @@ def create_job(job: JobCreate, current=Depends(require_hr_role)):
         response = supabase.table('job_postings').insert(data).execute()
         if response.data and len(response.data) > 0:
             created_job = response.data[0]
+            # Invalidate cache for jobs-related endpoints
+            invalidate_cache("hr_employees")  # Since jobs might affect employee listings
             return JobResponse(
                 id=created_job['id'],
                 title=created_job['title'],
@@ -50,6 +53,9 @@ def create_department(dept: DepartmentCreate, current=Depends(require_hr_role)):
         response = supabase.table('departments').insert(data).execute()
         if response.data and len(response.data) > 0:
             created_dept = response.data[0]
+            # Invalidate cache for employee-related endpoints since departments affect employee data
+            invalidate_cache("hr_employees")
+            invalidate_cache("hr_employee_profile")
             return DepartmentResponse(
                 id=created_dept['id'],
                 name=created_dept['name'],
@@ -70,6 +76,8 @@ def update_job(job_id: str, job: Job, current=Depends(require_hr_role)):
         response = supabase.table("job_postings").update(update_data).eq("id", job_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Job not found")
+        # Invalidate cache for jobs-related endpoints
+        invalidate_cache("hr_employees")  # Since job updates might affect employee listings
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,6 +90,8 @@ def create_company(company: CompanyCreate, current=Depends(require_hr_role)):
         response = supabase.table('companies').insert(data).execute()
         if response.data and len(response.data) > 0:
             created_company = response.data[0]
+            # Invalidate cache for company-related endpoints
+            invalidate_cache("hr_companies")
             return CompanyResponse(**created_company)
         else:
             raise HTTPException(status_code=400, detail="Failed to create company")
@@ -89,6 +99,7 @@ def create_company(company: CompanyCreate, current=Depends(require_hr_role)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/companies", response_model=list[CompanyResponse])
+@cached_endpoint("hr_companies")
 def get_companies(current=Depends(require_hr_role)):
     try:
         response = supabase.table('companies').select('*').execute()
@@ -96,6 +107,8 @@ def get_companies(current=Depends(require_hr_role)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# Add emmployee to company
 @router.post("/companies/{company_id}/employees", response_model=EmployeeResponse)
 def add_employee_to_company(company_id: str, employee: EmployeeCreate, current=Depends(require_hr_role)):
     try:
@@ -127,6 +140,9 @@ def add_employee_to_company(company_id: str, employee: EmployeeCreate, current=D
         response = supabase.table('employees').insert(employee_data).execute()
         if response.data and len(response.data) > 0:
             created_employee = response.data[0]
+            # Invalidate cache for employee-related endpoints
+            invalidate_cache("hr_employees")
+            invalidate_cache("hr_employee_profile")
             return EmployeeResponse(**created_employee)
         else:
             raise HTTPException(status_code=400, detail="Failed to create employee")
@@ -135,7 +151,11 @@ def add_employee_to_company(company_id: str, employee: EmployeeCreate, current=D
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to add employee: {str(e)}")
 
+
+
+# All employees of a company
 @router.get("/companies/{company_id}/employees", response_model=list[EmployeeResponse])
+@cached_endpoint("hr_employees")
 def get_employees_by_company(company_id: str, current=Depends(require_hr_role)):
     try:
         # First verify company exists
@@ -153,6 +173,7 @@ def get_employees_by_company(company_id: str, current=Depends(require_hr_role)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch employees: {str(e)}")
 
 @router.get("/employees", response_model=list[EmployeeResponse])
+@cached_endpoint("hr_employees")
 def get_employees_by_hr_company(current=Depends(require_hr_role)):
     try:
         # Get HR user's company_id from user metadata or profile
@@ -177,7 +198,9 @@ def get_employees_by_hr_company(current=Depends(require_hr_role)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch employees: {str(e)}")
 
+# Employee info my Employee id 
 @router.get("/employees/{employee_id}", response_model=EmployeeResponse)
+@cached_endpoint("hr_employee_profile")
 def get_employee_profile(employee_id: str, current=Depends(require_hr_role)):
     try:
         # Get HR user's company_id from user metadata

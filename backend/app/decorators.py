@@ -5,6 +5,21 @@ from datetime import datetime
 import json
 from app.redis_client import redis_client
 
+def invalidate_cache(prefix: str):
+    """
+    Invalidate all cache keys with the given prefix.
+
+    Args:
+        prefix: The cache key prefix to invalidate (e.g., "hr_companies")
+    """
+    cursor = 0
+    while True:
+        cursor, keys = redis_client.scan(cursor, match=f"{prefix}:*")
+        if keys:
+            redis_client.delete(*keys)
+        if cursor == 0:
+            break
+
 def cached_endpoint(cache_key_prefix: str, ttl: int = 300):
     """
     Decorator to cache API endpoint responses.
