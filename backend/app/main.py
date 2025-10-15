@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-from app.routes import auth, hr, public, jobs  # import the auth, hr, public, and jobs routers
+from app.routes import auth, hr, public, jobs, candidate  # import the auth, hr, public, jobs, and candidate routers
 from app.middleware import RateLimitMiddleware, CacheMiddleware
 
 app = FastAPI()
@@ -43,3 +43,4 @@ app.include_router(auth.router)
 app.include_router(hr.router)
 app.include_router(public.router)
 app.include_router(jobs.router)
+app.include_router(candidate.router)

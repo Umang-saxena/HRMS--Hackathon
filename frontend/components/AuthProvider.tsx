@@ -10,11 +10,13 @@ import CandidateLayout from '@/components/layout/CandidateLayout';
 
 interface AuthContextType {
   user: any;
+  session: any;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   loading: true,
 });
 
@@ -37,6 +39,7 @@ const getRolePage = (role: string) => {
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -46,6 +49,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
+      setSession(session);
       setLoading(false);
     };
 
@@ -55,6 +59,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setUser(session?.user ?? null);
+        setSession(session);
         setLoading(false);
 
         // Redirect logic
@@ -101,7 +106,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, session, loading }}>
       {user ? renderLayout() : children}
     </AuthContext.Provider>
   );

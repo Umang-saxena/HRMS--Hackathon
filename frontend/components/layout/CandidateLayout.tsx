@@ -11,7 +11,8 @@ import {
   Calendar,
   MessageSquare,
   TrendingUp,
-  CheckCircle
+  CheckCircle,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';
@@ -26,6 +27,7 @@ const navigation = [
   { name: 'Messages', href: '/candidate/messages', icon: MessageSquare },
   { name: 'Career Progress', href: '/candidate/progress', icon: TrendingUp },
   { name: 'Offers', href: '/candidate/offers', icon: CheckCircle },
+  { name: 'Settings', href: '/candidate/settings', icon: Settings },
 ];
 
 interface CandidateLayoutProps {

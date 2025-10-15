@@ -80,5 +80,36 @@ CREATE TABLE applications (
 
 
 
+-- Candidate Settings Table
+CREATE TABLE candidate_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE,  -- References auth.users(id)
+
+    -- Profile Preferences
+    display_name TEXT,
+    bio TEXT,
+    profile_picture_url TEXT,
+    cover_photo_url TEXT,
+    education TEXT[] DEFAULT '{}',
+    work_experience TEXT[] DEFAULT '{}',
+    certifications TEXT[] DEFAULT '{}',
+    languages_known TEXT[] DEFAULT '{}',
+
+    location TEXT,
+    website TEXT,
+    linkedin TEXT,
+    github TEXT,
+
+    -- Notification Settings
+    email_job_alerts BOOLEAN DEFAULT TRUE,
+    email_application_updates BOOLEAN DEFAULT TRUE,
+    email_offer_updates BOOLEAN DEFAULT TRUE,
+    email_newsletter BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for performance optimization
 CREATE INDEX idx_employee_email ON employees(email);
+CREATE INDEX idx_candidate_settings_user_id ON candidate_settings(user_id);
