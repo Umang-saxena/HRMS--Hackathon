@@ -1,5 +1,51 @@
-fastapi[standard]==0.113.0
-pydantic==2.8.0
+# ------------------------------
+# Core Framework & Server
+# ------------------------------
+fastapi[standard]
+uvicorn[standard]
+pydantic
+
+# ------------------------------
+# Task Queue (Celery & Redis)
+# ------------------------------
+celery
+redis
+
+# ------------------------------
+# Data Science / ML
+# ------------------------------
+pandas
+numpy<2
+scikit-learn
+xgboost
+matplotlib
+seaborn
+joblib
+
+# ------------------------------
+# Deep Learning Stack (Install separately)
+# ------------------------------
+torch==2.2.2
+# torchaudio==2.2.2
+librosa
+soundfile
+
+# ------------------------------
+# Audio & Speech Analysis
+# ------------------------------
+silero-vad
+faster_whisper
+# ------------------------------
+# LangChain & LLM Tools
+# ------------------------------
+langchain
+langchain-core
+langchain-groq
+sentence-transformers
+
+# ------------------------------
+# Backend Integration
+# ------------------------------
 supabase
 uvicorn[standard]==0.24.0
 
@@ -11,3 +57,4 @@ pandas
 scikit-learn
 joblib
 
+requests
