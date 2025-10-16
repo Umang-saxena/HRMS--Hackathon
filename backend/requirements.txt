@@ -4,4 +4,7 @@ supabase
 uvicorn[standard]==0.24.0
 python-dotenv
 psycopg2-binary
+pandas
+scikit-learn
+joblib
 
