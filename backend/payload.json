@@ -1,0 +1,6 @@
+{
+  "employee_id": "9ea3cb96-c97e-472b-add1-79b06fce6f30",
+  "payroll_period_id": 1,
+  "attendance": { "working_days": 30, "present_days": 30 },
+  "regime": "new"
+}
