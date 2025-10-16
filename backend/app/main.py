@@ -6,6 +6,9 @@ import os
 
 load_dotenv()
 
+from app.routes import auth, hr, public, jobs, candidate  # import the auth, hr, public, jobs, and candidate routers
+from app.middleware import RateLimitMiddleware, CacheMiddleware
+
 # core routers
 from app.routes import auth, hr, public
 # optional routers
@@ -15,7 +18,14 @@ from app.routes import jobs  # may raise ImportError if jobs isn't present; remo
 from app.payroll.routes import router as payroll_router
 from app.performance.routes import router as perf_router
 
+
 app = FastAPI()
+
+# Add rate limiting middleware (100 requests per minute per IP)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+
+# Add caching middleware (5 minutes TTL)
+app.add_middleware(CacheMiddleware, cache_ttl=300)
 
 # CORS settings
 app.add_middleware(
@@ -43,6 +53,10 @@ app.include_router(auth.router)
 app.include_router(hr.router)
 app.include_router(public.router)
 
+app.include_router(jobs.router)
+app.include_router(candidate.router)
+
+
 # Optional: include jobs router only if it exists
 try:
     app.include_router(jobs.router)
@@ -53,3 +67,4 @@ except Exception:
 # Include payroll and performance routers
 app.include_router(payroll_router)
 app.include_router(perf_router)
+

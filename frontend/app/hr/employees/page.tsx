@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Mail, Phone, Building2, Calendar } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Search, Filter, Mail, Phone, Building2, Calendar, User, DollarSign, MapPin } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,8 @@ export default function EmployeesPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -46,34 +48,129 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     loadData();
+    loadDepartments();
   }, []);
 
+  async function loadDepartments() {
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error('API request failed');
+      const companiesData = await res.json();
+
+      // Assuming the HR user belongs to the first company or we need to get company_id from user metadata
+      const companyId = session?.user?.user_metadata?.company_id || companiesData[0]?.id;
+
+      if (companyId) {
+        const deptRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/departments?company_id=${companyId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (deptRes.ok) {
+          const departmentsData = await deptRes.json();
+          setDepartments(departmentsData || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching departments:', err);
+      // fallback to Supabase DB query
+      const { data: fallbackData } = await supabase
+        .from('departments')
+        .select('*')
+        .order('name');
+      setDepartments(fallbackData || []);
+    }
+  }
+
   async function loadData() {
-    const { data: employeesData } = await supabase
-      .from('employees')
-      .select('*, departments(name)')
-      .order('created_at', { ascending: false });
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
 
-    const { data: deptData } = await supabase
-      .from('departments')
-      .select('*')
-      .order('name');
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/employees`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-    setEmployees(employeesData || []);
-    setDepartments(deptData || []);
+      if (!res.ok) throw new Error('API request failed');
+      const employeesData = await res.json();
+      setEmployees(employeesData || []);
+    } catch (err) {
+      console.error('Error fetching employees:', err);
+      // fallback to Supabase DB query
+      const { data: fallbackData } = await supabase
+        .from('employees')
+        .select('*, departments(name)')
+        .order('created_at', { ascending: false });
+      setEmployees(fallbackData || []);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const { error } = await supabase.from('employees').insert([
-      {
-        ...formData,
-        salary: formData.salary ? parseFloat(formData.salary) : null,
-      },
-    ]);
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
+    let companyId = session?.user?.user_metadata?.company_id;
 
-    if (!error) {
+    // If company_id not in user metadata, get it from companies API
+    if (!companyId) {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (res.ok) {
+          const companiesData = await res.json();
+          companyId = companiesData[0]?.id;
+        }
+      } catch (err) {
+        console.error('Error fetching company ID:', err);
+        return;
+      }
+    }
+
+    if (!companyId) {
+      console.error('Company ID not found');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies/${companyId}/employees`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          company_id: companyId,
+          salary: formData.salary ? parseFloat(formData.salary) : null,
+          date_of_joining: formData.hire_date,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Failed to add employee');
+      }
+
       setIsDialogOpen(false);
       setFormData({
         first_name: '',
@@ -87,6 +184,9 @@ export default function EmployeesPage() {
         status: 'active',
       });
       loadData();
+    } catch (err) {
+      console.error('Error adding employee:', err);
+      // You might want to show an error message to the user here
     }
   }
 
@@ -116,13 +216,15 @@ export default function EmployeesPage() {
           <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
           <p className="text-slate-600 mt-1">Manage your team members</p>
         </div>
+        <Button
+          onClick={() => setIsDialogOpen(true)}
+          className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Employee
+        </Button>
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Employee
-            </Button>
-          </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Employee</DialogTitle>
@@ -298,7 +400,14 @@ export default function EmployeesPage() {
                       </div>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedEmployee(employee);
+                      setIsProfileModalOpen(true);
+                    }}
+                  >
                     View Profile
                   </Button>
                 </div>
@@ -307,6 +416,154 @@ export default function EmployeesPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Employee Profile Modal */}
+      <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Employee Profile</DialogTitle>
+            <DialogDescription>
+              Detailed information about {selectedEmployee?.first_name} {selectedEmployee?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEmployee && (
+            <div className="space-y-6">
+              {/* Profile Header */}
+              <div className="flex items-center gap-6">
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={selectedEmployee.profile_image_url || ''} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-2xl">
+                    {selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      {selectedEmployee.first_name} {selectedEmployee.last_name}
+                    </h2>
+                    <Badge className={getStatusColor(selectedEmployee.status)}>
+                      {selectedEmployee.status}
+                    </Badge>
+                  </div>
+                  <p className="text-lg text-slate-600">{selectedEmployee.position}</p>
+                  <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-1">
+                      <Mail className="w-4 h-4" />
+                      {selectedEmployee.email}
+                    </div>
+                    {selectedEmployee.phone && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-4 h-4" />
+                        {selectedEmployee.phone}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      Joined {new Date(selectedEmployee.hire_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Employment Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="w-5 h-5" />
+                      Employment Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Employee ID</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.id}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Position</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.position}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Department</label>
+                      <p className="text-sm text-slate-900">
+                        {(selectedEmployee as any).departments?.name || 'Not assigned'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Status</label>
+                      <Badge className={getStatusColor(selectedEmployee.status)}>
+                        {selectedEmployee.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Hire Date</label>
+                      <p className="text-sm text-slate-900">
+                        {new Date(selectedEmployee.hire_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {selectedEmployee.salary && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Salary</label>
+                        <p className="text-sm text-slate-900">
+                          ${selectedEmployee.salary.toLocaleString()}/year
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Contact Information */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Phone className="w-5 h-5" />
+                      Contact Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Email</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.email}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-600">Phone</label>
+                      <p className="text-sm text-slate-900">{selectedEmployee.phone || 'Not provided'}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Additional Information */}
+                <Card className="md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="w-5 h-5" />
+                      Additional Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Created At</label>
+                        <p className="text-sm text-slate-900">
+                          {new Date(selectedEmployee.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Last Updated</label>
+                        <p className="text-sm text-slate-900">
+                          {new Date(selectedEmployee.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

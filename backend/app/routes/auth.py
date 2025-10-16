@@ -72,10 +72,17 @@ def candidate_only(current = Depends(get_current_user)):
 @router.post("/signup")
 def signup(user: UserSignup):
     try:
+        # Prepare user metadata including company information if provided
+        user_metadata = {"role": user.role.value}
+        if user.company_id:
+            user_metadata["company_id"] = user.company_id
+        if user.company_name:
+            user_metadata["company_name"] = user.company_name
+
         response = supabase.auth.sign_up({
             "email": user.email,
             "password": user.password,
-            "options": {"data": {"role": user.role.value}}
+            "options": {"data": user_metadata}
         })
         if response.user is None:
             raise HTTPException(status_code=400, detail="Signup failed")

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Users, GraduationCap, TrendingUp, AlertCircle, Brain, Calendar } from 'lucide-react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import type { Employee, AIInsight, EmployeeCourse } from '@/lib/supabase';
 
 export default function Home() {
+  const router = useRouter();
   const [stats, setStats] = useState({
     totalEmployees: 0,
     activeCourses: 0,
@@ -258,7 +260,10 @@ export default function Home() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="p-4 text-left border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200">
+            <button
+              onClick={() => router.push('/hr/employees')}
+              className="p-4 text-left border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200"
+            >
               <Users className="w-6 h-6 text-blue-600 mb-2" />
               <h4 className="font-semibold text-slate-900">Add New Employee</h4>
               <p className="text-xs text-slate-600 mt-1">Onboard a new team member</p>
