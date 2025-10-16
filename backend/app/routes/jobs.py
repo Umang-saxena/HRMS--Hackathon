@@ -1,0 +1,128 @@
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer
+from app.supabase_client import supabase
+from app.schemas.job import Job
+from app.schemas.hr import JobResponse
+from app.schemas.application import JobApplicationCreate, JobApplicationResponse
+from app.decorators import cached_endpoint
+from typing import List
+
+security = HTTPBearer()
+
+router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+# Get all Jobs
+@router.get("/", response_model=List[JobResponse])
+@cached_endpoint("open_jobs", ttl=300)
+def get_open_jobs(page: int = 1, limit: int = 10):
+    try:
+        # Fetch from database
+        offset = (page - 1) * limit
+        response = supabase.table('job_postings').select('*').eq('status', 'open').range(offset, offset + limit - 1).execute()
+        jobs = response.data
+        return [JobResponse(**job) for job in jobs]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Get Job By JobId
+@router.get("/{job_id}")
+@cached_endpoint("job_details", ttl=300)
+def get_job_details(job_id: str):
+    try:
+        # Fetch from database
+        response = supabase.table("job_postings").select("*").eq("id", job_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return response.data[0]  # Assuming single record
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def get_current_candidate(token: str = Depends(security)):
+    try:
+        response = supabase.auth.get_user(token.credentials)
+        user = response.user
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        role = user.user_metadata.get('role', 'employee')
+        if role != 'candidate':
+            raise HTTPException(status_code=403, detail="Access denied. Candidate role required.")
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# Apply for a Job
+@router.post("/{job_id}/apply", response_model=JobApplicationResponse)
+def apply_for_job(
+    job_id: str,
+    application: JobApplicationCreate,
+    current_user = Depends(get_current_candidate)
+):
+    try:
+        # Check if job exists and is open
+        job_response = supabase.table("job_postings").select("*").eq("id", job_id).eq("status", "open").execute()
+        if not job_response.data:
+            raise HTTPException(status_code=404, detail="Job not found or not open for applications")
+
+        # Check if candidate profile exists
+        candidate_response = supabase.table("candidates").select("*").eq("email", current_user.email).execute()
+        if not candidate_response.data:
+            raise HTTPException(status_code=400, detail="Candidate profile not found. Please complete your profile first.")
+
+        candidate_id = candidate_response.data[0]['id']
+
+        # Check if already applied
+        existing_application = supabase.table("applications").select("*").eq("job_id", job_id).eq("candidate_id", candidate_id).execute()
+        if existing_application.data:
+            raise HTTPException(status_code=400, detail="You have already applied for this job")
+
+        # Create application
+        application_data = {
+            'job_id': job_id,
+            'candidate_id': candidate_id,
+            'cover_letter': application.cover_letter,
+            'resume_url': application.resume_url,
+            'additional_info': application.additional_info,
+            'screening_status': 'Under Review'
+        }
+
+        response = supabase.table("applications").insert(application_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to submit application")
+
+        created_application = response.data[0]
+        return JobApplicationResponse(**created_application)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply for job: {str(e)}")
+
+
+# Get Applications for Current Candidate
+@router.get("/applications/me", response_model=List[JobApplicationResponse])
+def get_my_applications(current_user = Depends(get_current_candidate)):
+    try:
+        # Get candidate ID
+        candidate_response = supabase.table("candidates").select("*").eq("email", current_user.email).execute()
+        if not candidate_response.data:
+            return []
+
+        candidate_id = candidate_response.data[0]['id']
+
+        # Get applications with job details
+        response = supabase.table("applications").select("""
+            *,
+            job_postings!inner(title, department_id, location, employment_type, salary_range)
+        """).eq("candidate_id", candidate_id).execute()
+
+        return [JobApplicationResponse(**app) for app in response.data]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
+
+    
+

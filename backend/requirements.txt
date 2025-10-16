@@ -34,7 +34,6 @@ soundfile
 # Audio & Speech Analysis
 # ------------------------------
 silero-vad
-# faster_whisper
 faster_whisper
 # ------------------------------
 # LangChain & LLM Tools
@@ -48,4 +47,14 @@ sentence-transformers
 # Backend Integration
 # ------------------------------
 supabase
+uvicorn[standard]==0.24.0
+
+redis==5.0.1
+upstash-r=======
+python-dotenv
+psycopg2-binary
+pandas
+scikit-learn
+joblib
+
 requests

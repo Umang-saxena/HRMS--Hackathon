@@ -16,6 +16,8 @@ class UserSignup(BaseModel):
     email: str
     password: str
     role: Optional[Role] = Role.candidate
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 class AuthResponse(BaseModel):
     user: dict
