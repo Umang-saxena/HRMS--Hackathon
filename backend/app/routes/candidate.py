@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer
 from app.supabase_client import supabase
-from app.schemas.candidate import CandidateSettings, CandidateSettingsUpdate, CandidateSettingsResponse
+from app.schemas.candidate import CandidateSettings, CandidateSettingsUpdate, CandidateSettingsResponse, CandidateSettings
 from typing import Optional
+
 
 security = HTTPBearer()
 router = APIRouter(prefix="/candidate", tags=["candidate"])
@@ -21,16 +22,16 @@ def get_current_user(token: str = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 @router.get("/settings", response_model=CandidateSettingsResponse)
-def get_candidate_settings(current_user = Depends(get_current_user)):
+def get_candidate_settings(current_user: dict = Depends(get_current_user)):
     try:
         # Fetch settings from database
-        response = supabase.table('candidate_settings').select('*').eq('user_id', current_user.id).execute()
+        response = supabase.table('candidate_settings').select('*').eq('user_id', current_user["id"]).execute()
 
         if not response.data:
             # Return default settings if none exist
             default_settings = CandidateSettings()
             return CandidateSettingsResponse(
-                user_id=current_user.id,
+                user_id=current_user["id"],
                 settings=default_settings
             )
 
@@ -44,20 +45,21 @@ def get_candidate_settings(current_user = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch settings: {str(e)}")
 
+
 @router.put("/settings", response_model=CandidateSettingsResponse)
 def update_candidate_settings(
     settings_update: CandidateSettingsUpdate,
-    current_user = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     try:
         # Fetch existing settings
-        existing_response = supabase.table('candidate_settings').select('*').eq('user_id', current_user.id).execute()
+        existing_response = supabase.table('candidate_settings').select('*').eq('user_id', current_user["id"]).execute()
 
         if not existing_response.data:
             # Create new settings record
             new_settings = CandidateSettings(**settings_update.dict(exclude_unset=True))
             settings_data = {
-                'user_id': current_user.id,
+                'user_id': current_user["id"],
                 **new_settings.dict()
             }
             response = supabase.table('candidate_settings').insert(settings_data).execute()
@@ -75,7 +77,7 @@ def update_candidate_settings(
             # Merge with existing data
             merged_data = {**existing_data, **update_data}
 
-            response = supabase.table('candidate_settings').update(merged_data).eq('user_id', current_user.id).execute()
+            response = supabase.table('candidate_settings').update(merged_data).eq('user_id', current_user["id"]).execute()
             updated_data = response.data[0]
 
             return CandidateSettingsResponse(
@@ -85,6 +87,7 @@ def update_candidate_settings(
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+
 
 @router.put("/password")
 def change_password(
@@ -131,3 +134,33 @@ def delete_account(current_user = Depends(get_current_user)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process account deletion: {str(e)}")
+
+@router.post("/profile", status_code=status.HTTP_201_CREATED)
+def create_candidate_profile(
+    profile_data: CandidateSettings,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        # Check if a profile already exists for the user
+        existing_response = supabase.table('candidates').select('*').eq('id', current_user.id).execute()
+
+        if existing_response.data:
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Profile already exists for this user")
+
+        # Prepare the data for insertion
+        profile_data_dict = profile_data.dict()
+        profile_data_dict['user_id'] = current_user.id
+
+        # Insert the new profile data into the 'candidates' table
+        response = supabase.table('candidates').insert(profile_data_dict).execute()
+
+
+        if not response.data:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create profile")
+
+        return {"message": "Candidate profile created successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create profile: {str(e)}")

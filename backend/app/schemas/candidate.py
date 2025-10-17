@@ -2,19 +2,26 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 class CandidateSettings(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    resume_url: str
+
     # Profile Preferences
     display_name: Optional[str] = None
     bio: Optional[str] = None
     profile_picture_url: Optional[str] = None
     cover_photo_url: Optional[str] = None
-    education: Optional[List[str]] = []
+    education: str = []
     work_experience: Optional[List[str]] = []
     certifications: Optional[List[str]] = []
     languages_known: Optional[List[str]] = []
     location: Optional[str] = None
     website: Optional[str] = None
-    linkedin: Optional[str] = None
-    github: Optional[str] = None
+    linkedin: str
+    github:str
 
     # Notification Settings
     email_job_alerts: Optional[bool] = True
@@ -23,6 +30,13 @@ class CandidateSettings(BaseModel):
     email_newsletter: Optional[bool] = False
 
 class CandidateSettingsUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    resume_url: Optional[str] = None
+
     # Profile Preferences
     display_name: Optional[str] = None
     bio: Optional[str] = None
