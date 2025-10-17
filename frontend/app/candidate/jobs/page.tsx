@@ -13,8 +13,8 @@ import {
 import { Search, Filter } from 'lucide-react';
 import { mockJobs } from '@/data/mockData';
 import { Job } from '@/types/job';
-import JobCard from '@/components/jobs/JobCard';
-import JobDetailsDialog from '@/components/jobs/JobDetailsDialog';
+import JobCard from '@/components/candidate/JobCard';
+import JobDetailsDialog from '@/components/candidate/JobDetailsDialog';
 
 export default function Jobs() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
