@@ -22,12 +22,12 @@ const navigation = [
   { name: 'Dashboard', href: '/candidate', icon: LayoutDashboard },
   { name: 'Job Search', href: '/candidate/jobs', icon: Briefcase },
   { name: 'My Applications', href: '/candidate/applications', icon: FileText },
-  { name: 'Interviews', href: '/candidate/interviews', icon: Calendar },
+  // { name: 'Interviews', href: '/candidate/interviews', icon: Calendar },
   { name: 'Profile', href: '/candidate/profile', icon: User },
-  { name: 'Messages', href: '/candidate/messages', icon: MessageSquare },
-  { name: 'Career Progress', href: '/candidate/progress', icon: TrendingUp },
-  { name: 'Offers', href: '/candidate/offers', icon: CheckCircle },
-  { name: 'Settings', href: '/candidate/settings', icon: Settings },
+  // { name: 'Messages', href: '/candidate/messages', icon: MessageSquare },
+  // { name: 'Career Progress', href: '/candidate/progress', icon: TrendingUp },
+  // { name: 'Offers', href: '/candidate/offers', icon: CheckCircle },
+  // { name: 'Settings', href: '/candidate/settings', icon: Settings },
 ];
 
 interface CandidateLayoutProps {
