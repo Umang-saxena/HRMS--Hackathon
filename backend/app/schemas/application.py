@@ -3,6 +3,17 @@ from typing import Optional
 from datetime import datetime
 
 class JobApplicationCreate(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    cover_letter: Optional[str] = None
+    resume_url: Optional[str] = None
+    additional_info: Optional[str] = None
+    availability :str
+
+class HRJobApplicationCreate(BaseModel):
+    job_id: str
+    candidate_id: str
     cover_letter: Optional[str] = None
     resume_url: Optional[str] = None
     additional_info: Optional[str] = None

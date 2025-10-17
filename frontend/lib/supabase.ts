@@ -96,3 +96,18 @@ export type AttendanceLog = {
   status: 'present' | 'absent' | 'late' | 'half_day' | 'work_from_home';
   notes: string | null;
 };
+
+
+export type JobApplicationResponse = {
+  id: string;
+  job_id: string;
+  candidate_id: string;
+  ai_score: number | null;
+  match_reason: string | null;
+  screening_status: string;
+  applied_at: string;
+  updated_at: string;
+  cover_letter: string | null;
+  resume_url: string | null;
+  additional_info: string | null;
+};

@@ -79,10 +79,20 @@ def apply_for_job(
         if existing_application.data:
             raise HTTPException(status_code=400, detail="You have already applied for this job")
 
+        # Extract candidate details from application
+        first_name = application.first_name
+        last_name = application.last_name
+        email = application.email
+        availability = application.availability
+
         # Create application
         application_data = {
             'job_id': job_id,
             'candidate_id': candidate_id,
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': email,
+            'availability': availability,
             'cover_letter': application.cover_letter,
             'resume_url': application.resume_url,
             'additional_info': application.additional_info,
@@ -123,6 +133,3 @@ def get_my_applications(current_user = Depends(get_current_candidate)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
-
-    
-
