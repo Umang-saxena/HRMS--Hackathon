@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,18 +11,54 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Filter } from 'lucide-react';
-import { mockJobs } from '@/data/mockData';
 import { Job } from '@/types/job';
 import JobCard from '@/components/candidate/JobCard';
 import JobDetailsDialog from '@/components/candidate/JobDetailsDialog';
 
 export default function Jobs() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const filteredJobs = mockJobs.filter((job) => {
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/jobs/`);
+        if (response.ok) {
+          const data = await response.json();
+          // Transform API data to match Job interface
+          const transformedJobs: Job[] = data.map((job: any) => ({
+            id: job.id,
+            title: job.title,
+            company: 'Company Name', // API doesn't have company, using placeholder
+            location: job.location,
+            type: job.employment_type,
+            experience: job.experience_required,
+            salary: job.salary_range,
+            description: job.description,
+            requirements: job.requirements,
+            postedDate: new Date(job.created_at).toISOString().split('T')[0],
+            department: job.department_id // Using department_id as department
+          }));
+          setJobs(transformedJobs);
+        } else {
+          console.error('Failed to fetch jobs');
+        }
+      } catch (error) {
+        console.error('Error fetching jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
+
+  const filteredJobs = jobs.filter((job) => {
     const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          job.company.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || job.type === typeFilter;
@@ -40,7 +76,7 @@ export default function Jobs() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Available Positions</h1>
         <p className="text-muted-foreground">
-          Discover and apply to {mockJobs.length} open positions
+          Discover and apply to {jobs.length} open positions
         </p>
       </div>
 

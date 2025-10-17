@@ -8,11 +8,6 @@ import {
   Briefcase,
   User,
   FileText,
-  Calendar,
-  MessageSquare,
-  TrendingUp,
-  CheckCircle,
-  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';

@@ -5,7 +5,7 @@ export interface Job {
   title: string;
   company: string;
   location: string;
-  type: 'Full-time' | 'Part-time' | 'Contract' | 'Internship';
+  type: string; // Updated to string to match API employment_type
   experience: string;
   salary: string;
   description: string;
