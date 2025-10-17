@@ -13,7 +13,8 @@ import {
   Building2,
   Bot,
   FileText,
-  UserCheck
+  UserCheck,
+  ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Dashboard', href: '/hr', icon: LayoutDashboard },
   { name: 'Employees', href: '/hr/employees', icon: Users },
   { name: 'Departments', href: '/hr/departments', icon: Building2 },
+  { name: 'Applications', href: '/hr/applications', icon: ClipboardList },
   { name: 'Learning & Development', href: '/hr/learning', icon: GraduationCap },
   { name: 'Performance Reviews', href: '/hr/performance', icon: TrendingUp },
   { name: 'AI Insights', href: '/hr/insights', icon: Brain },
