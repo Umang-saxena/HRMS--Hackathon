@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, GraduationCap, TrendingUp, AlertCircle, Brain, Calendar } from 'lucide-react';
-import StatsCard from '@/components/dashboard/StatsCard';
+import StatsCard from '@/components/hr/StatsCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/simple-progress';
