@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer
 from app.supabase_client import supabase
-from app.schemas.job import Job
 from app.schemas.hr import JobResponse
 from app.schemas.application import JobApplicationCreate, JobApplicationResponse
 from app.decorators import cached_endpoint
@@ -17,10 +16,24 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 @cached_endpoint("open_jobs", ttl=300)
 def get_open_jobs(page: int = 1, limit: int = 10):
     try:
-        # Fetch from database
+        # Fetch from database with company name using left join
         offset = (page - 1) * limit
-        response = supabase.table('job_postings').select('*').eq('status', 'open').range(offset, offset + limit - 1).execute()
+        response = supabase.table('job_postings').select('*, companies!left(name)').eq('status', 'open').range(offset, offset + limit - 1).execute()
         jobs = response.data
+        # Process the joined data to extract company_name and fetch department name separately
+        for job in jobs:
+            job['company_name'] = job.get('companies', {}).get('name')
+            if 'companies' in job:
+                del job['companies']
+            # Fetch department name separately
+            if job.get('department_id'):
+                dept_response = supabase.table('departments').select('name').eq('id', job['department_id']).execute()
+                if dept_response.data:
+                    job['department_name'] = dept_response.data[0]['name'].strip()  # Remove trailing newline
+                else:
+                    job['department_name'] = 'Unknown Department'
+            else:
+                job['department_name'] = 'Unknown Department'
         return [JobResponse(**job) for job in jobs]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -31,11 +44,25 @@ def get_open_jobs(page: int = 1, limit: int = 10):
 @cached_endpoint("job_details", ttl=300)
 def get_job_details(job_id: str):
     try:
-        # Fetch from database
-        response = supabase.table("job_postings").select("*").eq("id", job_id).execute()
+        # Fetch from database with company name using left join
+        response = supabase.table("job_postings").select("*, companies!left(name)").eq("id", job_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Job not found")
-        return response.data[0]  # Assuming single record
+        job = response.data[0]
+        # Process the joined data to extract company_name and fetch department name separately
+        job['company_name'] = job.get('companies', {}).get('name')
+        if 'companies' in job:
+            del job['companies']
+        # Fetch department name separately
+        if job.get('department_id'):
+            dept_response = supabase.table('departments').select('name').eq('id', job['department_id']).execute()
+            if dept_response.data:
+                job['department_name'] = dept_response.data[0]['name'].strip()  # Remove trailing newline
+            else:
+                job['department_name'] = 'Unknown Department'
+        else:
+            job['department_name'] = 'Unknown Department'
+        return job  # Assuming single record
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

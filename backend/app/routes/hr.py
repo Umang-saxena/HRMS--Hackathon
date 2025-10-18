@@ -25,11 +25,13 @@ def create_job(job: JobCreate, current=Depends(require_hr_role)):
         if response.data and len(response.data) > 0:
             created_job = response.data[0]
             # Invalidate cache for jobs-related endpoints
-            invalidate_cache("hr_employees")  # Since jobs might affect employee listings
+            invalidate_cache("open_jobs")  # Since jobs might affect employee listings
             return JobResponse(
                 id=created_job['id'],
                 title=created_job['title'],
                 department_id=created_job['department_id'],
+                company_id=created_job['company_id'],
+                company_name=created_job.get('company_name'),
                 location=created_job['location'],
                 employment_type=created_job['employment_type'],
                 description=created_job['description'],
@@ -358,6 +360,25 @@ def get_jobs_by_company(company_id: str, current=Depends(require_hr_role)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch jobs: {str(e)}")
+
+
+@router.get("/jobs/{job_id}/applications", response_model=List[JobApplicationResponse])
+@cached_endpoint("hr_applications")
+def get_applications_by_job(job_id: str, current=Depends(require_hr_role)):
+    try:
+        # Get HR user
+        hr_user = current['user']
+
+        # Query applications for the specific job, ensuring the job was created by this HR user
+        response = supabase.table('applications').select("""
+            *,
+            job_postings!inner(title, department_id, location, employment_type, salary_range, created_by),
+            candidates!inner(name, email, phone)
+        """).eq('job_id', job_id).eq('job_postings.created_by', hr_user.id).execute()
+
+        return [JobApplicationResponse(**app) for app in response.data]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
 
 
 @router.post("/applications", response_model=JobApplicationResponse)
