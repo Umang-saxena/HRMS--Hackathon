@@ -16,6 +16,7 @@ def require_hr_role(current=Depends(get_current_user)):
     return current
 
 @router.post("/jobs", response_model=JobResponse)
+# @invalidate_cache("open_jobs")
 def create_job(job: JobCreate, current=Depends(require_hr_role)):
     try:
         data = job.dict()

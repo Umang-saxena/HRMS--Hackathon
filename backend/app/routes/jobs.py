@@ -13,7 +13,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 # Get all Jobs
 @router.get("/", response_model=List[JobResponse])
-@cached_endpoint("open_jobs", ttl=300)
+# @cached_endpoint("open_jobs", ttl=300)
 def get_open_jobs(page: int = 1, limit: int = 10):
     try:
         # Fetch from database with company name using left join
