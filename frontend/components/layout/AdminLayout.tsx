@@ -23,18 +23,12 @@ import { useAuth } from '@/components/AuthProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'System Overview', href: '/admin/overview', icon: BarChart3 },
-  { name: 'User Management', href: '/admin/users', icon: Users },
   { name: 'Departments', href: '/admin/departments', icon: Building2 },
-  { name: 'Employees', href: '/admin/employees', icon: Users },
-  { name: 'Learning & Development', href: '/admin/learning', icon: GraduationCap },
+  { name: 'Employees', href: '/admin/employee', icon: Users },
   { name: 'Performance Reviews', href: '/admin/performance', icon: TrendingUp },
-  { name: 'AI Insights', href: '/admin/insights', icon: Brain },
+  { name: 'Tasks', href: '/admin/tasks', icon: Brain },
   { name: 'Attendance', href: '/admin/attendance', icon: Calendar },
   { name: 'AI Assistant', href: '/admin/assistant', icon: Bot },
-  { name: 'Reports', href: '/admin/reports', icon: FileText },
-  { name: 'Settings', href: '/admin/settings', icon: Settings },
-  { name: 'Security', href: '/admin/security', icon: Shield },
 ];
 
 interface AdminLayoutProps {
