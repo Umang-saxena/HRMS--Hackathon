@@ -34,7 +34,7 @@ export default function Jobs() {
           const transformedJobs: Job[] = data.map((job: any) => ({
             id: job.id,
             title: job.title,
-            company: 'Company Name', // API doesn't have company, using placeholder
+            company: job.company_name , // API now returns company_name
             location: job.location,
             type: job.employment_type,
             experience: job.experience_required,
@@ -42,7 +42,7 @@ export default function Jobs() {
             description: job.description,
             requirements: job.requirements,
             postedDate: new Date(job.created_at).toISOString().split('T')[0],
-            department: job.department_id // Using department_id as department
+            department: job.department_name // Using department_name instead of department_id
           }));
           setJobs(transformedJobs);
         } else {

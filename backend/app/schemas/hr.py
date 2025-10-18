@@ -5,6 +5,7 @@ from datetime import datetime
 class JobCreate(BaseModel):
     title: str
     department_id: str  # Department ID as string
+    company_id: str  # Company ID as string
     location: str  # Required location
     employment_type: str  # e.g., 'Full-Time', 'Part-Time', etc.
     description: str
@@ -17,6 +18,9 @@ class JobResponse(BaseModel):
     id: str
     title: str
     department_id: str
+    department_name: Optional[str] = None
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
     location: str
     employment_type: str
     description: str

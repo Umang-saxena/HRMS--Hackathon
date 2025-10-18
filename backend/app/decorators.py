@@ -3,7 +3,6 @@ from typing import Any, Callable
 from fastapi import Request, HTTPException
 from datetime import datetime
 import json
-from app.redis_client import redis_client
 
 def invalidate_cache(prefix: str):
     """
@@ -14,6 +13,7 @@ def invalidate_cache(prefix: str):
     """
     cursor = 0
     while True:
+        from app.redis_client import redis_client
         cursor, keys = redis_client.scan(cursor, match=f"{prefix}:*")
         if keys:
             redis_client.delete(*keys)
@@ -31,6 +31,7 @@ def cached_endpoint(cache_key_prefix: str, ttl: int = 300):
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(*args, **kwargs):
+            from app.redis_client import redis_client
             # Generate cache key from function name and arguments
             request = None
             for arg in args:
