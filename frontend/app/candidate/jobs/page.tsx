@@ -1,167 +1,156 @@
-"use client";
+"use client"
+import { useState, useEffect } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Search, Filter } from 'lucide-react';
+import { Job } from '@/types/job';
+import JobCard from '@/components/candidate/JobCard';
+import JobDetailsDialog from '@/components/candidate/JobDetailsDialog';
 
-import React, { useState } from "react";
-import CandidateLayout from "@/components/layout/CandidateLayout";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import Link from "next/link";
+export default function Jobs() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
-const JobSearchPage = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [jobTypeFilter, setJobTypeFilter] = useState(""); // e.g., "Full-time", "Part-time"
-  const [experienceLevelFilter, setExperienceLevelFilter] = useState(""); // e.g., "Entry-level", "Mid-level", "Senior"
-  const [jobs, setJobs] = useState([
-    {
-      id: "1",
-      title: "Software Engineer",
-      company: "Tech Corp",
-      location: "San Francisco, CA",
-      jobType: "Full-time",
-      experienceLevel: "Mid-level",
-      description: "We are looking for a talented software engineer...",
-    },
-    {
-      id: "2",
-      title: "Data Scientist",
-      company: "Data Inc",
-      location: "New York, NY",
-      jobType: "Full-time",
-      experienceLevel: "Senior",
-      description: "We are seeking an experienced data scientist...",
-    },
-    {
-      id: "3",
-      title: "Frontend Developer",
-      company: "Web Solutions",
-      location: "Remote",
-      jobType: "Contract",
-      experienceLevel: "Entry-level",
-      description: "We need a skilled frontend developer for a short-term project...",
-    },
-  ]);
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/jobs/`);
+        if (response.ok) {
+          const data = await response.json();
+          // Transform API data to match Job interface
+          const transformedJobs: Job[] = data.map((job: any) => ({
+            id: job.id,
+            title: job.title,
+            company: 'Company Name', // API doesn't have company, using placeholder
+            location: job.location,
+            type: job.employment_type,
+            experience: job.experience_required,
+            salary: job.salary_range,
+            description: job.description,
+            requirements: job.requirements,
+            postedDate: new Date(job.created_at).toISOString().split('T')[0],
+            department: job.department_id // Using department_id as department
+          }));
+          setJobs(transformedJobs);
+        } else {
+          console.error('Failed to fetch jobs');
+        }
+      } catch (error) {
+        console.error('Error fetching jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleSearch = () => {
-    // Implement search logic here (e.g., call an API)
-    console.log("Search term:", searchTerm);
-    console.log("Location filter:", locationFilter);
-    console.log("Job type filter:", jobTypeFilter);
-    console.log("Experience level filter:", experienceLevelFilter);
-  };
-
-  const handleApplyJob = (jobId: string) => {
-    console.log(`Apply job clicked for job ID: ${jobId}`);
-    // Implement apply job logic here (e.g., open a modal or redirect to an application page)
-  };
-
-  const handleShareJob = (jobId: string) => {
-    console.log(`Share job clicked for job ID: ${jobId}`);
-    // Implement share job logic here (e.g., open a share dialog or copy a link to the clipboard)
-  };
+    fetchJobs();
+  }, []);
 
   const filteredJobs = jobs.filter((job) => {
-    const searchTermMatch =
-      searchTerm === "" ||
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchTerm.toLowerCase());
-    const locationMatch =
-      locationFilter === "" ||
-      job.location.toLowerCase().includes(locationFilter.toLowerCase());
-    const jobTypeMatch =
-      jobTypeFilter === "" ||
-      job.jobType.toLowerCase().includes(jobTypeFilter.toLowerCase());
-    const experienceLevelMatch =
-      experienceLevelFilter === "" ||
-      job.experienceLevel
-        .toLowerCase()
-        .includes(experienceLevelFilter.toLowerCase());
-
-    return (
-      searchTermMatch && locationMatch && jobTypeMatch && experienceLevelMatch
-    );
+    const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         job.company.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = typeFilter === 'all' || job.type === typeFilter;
+    return matchesSearch && matchesType;
   });
 
+  const handleViewDetails = (job: Job) => {
+    setSelectedJob(job);
+    setDialogOpen(true);
+  };
+
   return (
-    <CandidateLayout>
-      <div className="container mx-auto py-10">
-        <h1 className="text-2xl font-bold mb-5">Job Search</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold mb-2">Available Positions</h1>
+        <p className="text-muted-foreground">
+          Discover and apply to {jobs.length} open positions
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-          <div className="md:col-span-1">
-            <Label htmlFor="search">Search</Label>
-            <Input
-              type="text"
-              id="search"
-              placeholder="Job title or company"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-1">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              type="text"
-              id="location"
-              placeholder="City or state"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-1">
-            <Label htmlFor="jobType">Job Type</Label>
-            <Input
-              type="text"
-              id="jobType"
-              placeholder="Full-time, Part-time, Contract..."
-              value={jobTypeFilter}
-              onChange={(e) => setJobTypeFilter(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-1">
-            <Label htmlFor="experienceLevel">Experience Level</Label>
-            <Input
-              type="text"
-              id="experienceLevel"
-              placeholder="Entry-level, Mid-level, Senior..."
-              value={experienceLevelFilter}
-              onChange={(e) => setExperienceLevelFilter(e.target.value)}
-            />
-          </div>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by job title or company..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
         </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Job Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="Full-time">Full-time</SelectItem>
+            <SelectItem value="Part-time">Part-time</SelectItem>
+            <SelectItem value="Contract">Contract</SelectItem>
+            <SelectItem value="Internship">Internship</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-        <Button onClick={handleSearch} className="mb-5">
-          Search
-        </Button>
+      {/* Results count */}
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary">
+          {filteredJobs.length} {filteredJobs.length === 1 ? 'job' : 'jobs'} found
+        </Badge>
+        {searchQuery && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSearchQuery('')}
+          >
+            Clear search
+          </Button>
+        )}
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Job Cards */}
+      {filteredJobs.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredJobs.map((job) => (
-            <Card key={job.id}>
-              <CardContent>
-                <h2 className="text-lg font-semibold">{job.title}</h2>
-                <p className="text-gray-600">{job.company}</p>
-                <p className="text-gray-500">{job.location}</p>
-                <p className="text-gray-500">
-                  {job.jobType} - {job.experienceLevel}
-                </p>
-                <p className="mt-2">{job.description}</p>
-                <Link href={`/candidate/jobs/${job.id}`}>
-                  <Button>View Job</Button>
-                </Link>
-                <Button onClick={() => handleApplyJob(job.id)} className="mt-4">
-                  Apply Job
-                </Button>
-                <Button onClick={() => handleShareJob(job.id)} className="mt-4">
-                  Share Job
-                </Button>
-              </CardContent>
-            </Card>
+            <JobCard key={job.id} job={job} onViewDetails={handleViewDetails} />
           ))}
         </div>
-      </div>
-    </CandidateLayout>
-  );
-};
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No jobs found matching your criteria</p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => {
+              setSearchQuery('');
+              setTypeFilter('all');
+            }}
+          >
+            Clear all filters
+          </Button>
+        </div>
+      )}
 
-export default JobSearchPage;
+      {/* Job Details Dialog */}
+      <JobDetailsDialog
+        job={selectedJob}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    </div>
+  );
+}

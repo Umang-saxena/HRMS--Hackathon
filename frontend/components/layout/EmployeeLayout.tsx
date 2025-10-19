@@ -19,13 +19,13 @@ import { useAuth } from '@/components/AuthProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/employee', icon: LayoutDashboard },
-  { name: 'My Learning', href: '/employee/learning', icon: GraduationCap },
+  { name: 'Bonuses', href: '/employee/bonuses', icon: GraduationCap },
   { name: 'Performance', href: '/employee/performance', icon: TrendingUp },
   { name: 'Attendance', href: '/employee/attendance', icon: Calendar },
   { name: 'Profile', href: '/employee/profile', icon: User },
-  { name: 'Documents', href: '/employee/documents', icon: FileText },
-  { name: 'Achievements', href: '/employee/achievements', icon: Award },
-  { name: 'Time Off', href: '/employee/timeoff', icon: Clock },
+  { name: 'Payroll', href: '/employee/payroll', icon: FileText },
+  { name: 'Task', href: '/employee/task', icon: Award },
+  
 ];
 
 interface EmployeeLayoutProps {
