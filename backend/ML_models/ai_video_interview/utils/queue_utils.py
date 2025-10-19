@@ -54,9 +54,9 @@ def _ensure_rediss_and_ssl_params(url: str) -> str:
 
 # Candidate environment variables (look for commonly used names)
 _candidates = [
-    os.getenv("CELERY_BROKER_URL"),
-    os.getenv("BROKER_URL"),
-    os.getenv("CELERY_REDIS_URL"),
+    # os.getenv("CELERY_BROKER_URL"),
+    # os.getenv("BROKER_URL"),
+    # os.getenv("CELERY_REDIS_URL"),
     os.getenv("REDIS_URL"),
     os.getenv("UPSTASH_REDIS_URL"),
 ]

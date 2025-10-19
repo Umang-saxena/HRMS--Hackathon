@@ -2,10 +2,8 @@
 from fastapi import APIRouter, HTTPException
 # Import your Pydantic schemas correctly
 from ..schemas.ai_interview import ConversationRequest, AnalysisRequest, Message
-# Import the core logic from your ML_models structure (adjust path if needed)
-# The '...' goes up levels from 'routes' -> 'app' -> 'backend'
-from ...ML_models.ai_video_interview.interview_agent import conversation_agent
-from ...ML_models.ai_video_interview.pipeline import run_full_analysis
+from ML_models.ai_video_interview.interview_agent import conversation_agent
+from ML_models.ai_video_interview.pipeline import run_full_analysis
 
 # Create a router instance with a prefix and tags for organization/documentation
 router = APIRouter(

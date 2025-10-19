@@ -12,11 +12,11 @@ import os
 load_dotenv()
 
 # --- Import ALL your routers ---
+from app.routes import ai_interview # Import the new AI interview router file
 from app.routes import auth, hr, public, jobs, candidate
 from app.payroll.routes import router as payroll_router
 from app.performance.routes import router as perf_router
 # *** ADD IMPORT FOR THE NEW AI INTERVIEW ROUTER ***
-from app.routes import ai_interview # Import the new AI interview router file
 
 # --- Import Middleware ---
 # Ensure these middleware files/classes exist in app/middleware.py or comment out

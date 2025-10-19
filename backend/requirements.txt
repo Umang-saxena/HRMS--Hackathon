@@ -17,7 +17,7 @@ seaborn
 joblib
 
 # Deep Learning Stack
-torch==2.1.0
+torch==2.2.0
 librosa
 soundfile
 
@@ -41,3 +41,4 @@ requests
 python-dotenv
 psycopg2-binary
 requests
+sqlalchemy
