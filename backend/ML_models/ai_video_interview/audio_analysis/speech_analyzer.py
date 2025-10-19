@@ -2,15 +2,14 @@ import sys
 import os
 import torch                                        # PyTorch is still needed for Silero
 import librosa                                      # Used to get total audio duration
-from filler_detector import count_filler_words      # Your existing filler word detector
+from .filler_detector import count_filler_words      # Your existing filler word detector
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
 from backend.ML_models.ai_video_interview.utils import transcription_utils
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- NEW: Initialize the Silero VAD model ---
-# This block replaces the pyannote pipeline initialization.
+
 try:
     # Silero VAD is loaded directly from PyTorch Hub.
     silero_model, utils = torch.hub.load(
@@ -19,7 +18,6 @@ try:
         force_reload=False # Set to True if you have download issues
     )
     
-    # Unpack the utility functions that come with the model
     (get_speech_timestamps, _, read_audio, *_) = utils
     print("✅ Silero VAD model loaded successfully.")
     
@@ -35,8 +33,7 @@ def analyze_audio_metrics(audio_file_path: str, transcript: str) -> dict:
         return {"error": "Silero VAD model is not available."}
         
     try:
-        # --- NEW: Use Silero's utility to read audio ---
-        # This function reads the audio and automatically resamples it to the 16kHz required by the model.
+
         wav = read_audio(audio_file_path, sampling_rate=16000)
         
         # We can still use librosa to get the total duration easily.
@@ -78,7 +75,7 @@ def analyze_audio_metrics(audio_file_path: str, transcript: str) -> dict:
 
 if __name__ == "__main__":
     # This testing block remains the same and will now use the new Silero implementation.
-    sample_audio_path = "C:\\Users\\PRATHAM\\OneDrive\\Desktop\\HRMS--Hackathon\\backend\\ML_models\\ai_video_interview\\interview_agent\\Record (online-voice-recorder.com).mp3" 
+    sample_audio_path = "backend\\ML_models\\ai_video_interview\\interview_agent\\Record (online-voice-recorder.com).mp3" 
     
     print("Transcribing audio for test...")
     transcription = transcription_utils.transcribe_audio(sample_audio_path)

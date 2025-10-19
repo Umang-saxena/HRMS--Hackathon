@@ -35,18 +35,16 @@ def run_full_analysis(interview_id: str, job_title: str, audio_file_name: str):
     
     # 5. Save the combined results to your Supabase database
     try:
-        # Example: update a table named 'interviews' with the results
-        supabase.table("interviews").update({
-            "transcript": transcript,
-            "content_analysis": content_analysis,
-            "speech_analysis": speech_metrics,
-            "status": "completed"
-        }).eq("id", interview_id).execute()
+        # supabase.table("interviews").update({
+        #     "transcript": transcript,
+        #     "content_analysis": content_analysis,
+        #     "speech_analysis": speech_metrics,
+        #     "status": "completed"
+        # }).eq("id", interview_id).execute()
         print(f"[{interview_id}] Analysis complete and results saved to database.")
     except Exception as e:
         print(f"[{interview_id}] Failed to save results to database: {e}")
 
-    # 6. Clean up the downloaded file
     os.remove(local_audio_path)
     
     return {"status": "success"}

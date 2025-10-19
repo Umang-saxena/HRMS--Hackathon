@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from .interview_agent import conversation_agent
 from .pipeline import run_full_analysis
-
+from fastapi.middleware.cors import CORSMiddleware # Import it
 # Pydantic models for API requests
 class ConversationRequest(BaseModel):
     job_description: str
@@ -17,6 +17,23 @@ class AnalysisRequest(BaseModel):
 
 app = FastAPI(title="AI Interviewer Module")
 
+# ... other imports
+
+app = FastAPI(title="AI Interviewer Module")
+
+# --- Add CORS Middleware ---
+origins = [
+    "http://localhost:3000", # Your frontend URL
+    # Add your deployed frontend URL here later
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,       # MUST include your frontend origin
+    allow_credentials=True,    # Usually needed
+    allow_methods=["*"],       # Crucial: Allows GET, POST, OPTIONS, etc.
+    allow_headers=["*"],       # Allows common headers like Content-Type
+)
 @app.post("/conversation")
 def handle_conversation(request: ConversationRequest):
     """Endpoint for the live, back-and-forth interview conversation."""

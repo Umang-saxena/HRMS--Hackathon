@@ -2,8 +2,7 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables BEFORE importing the Celery app
-# Make sure the .env file is in the root directory
+
 load_dotenv() 
 
 # Import the Celery app instance from your module
