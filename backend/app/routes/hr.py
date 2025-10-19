@@ -3,8 +3,10 @@ from app.supabase_client import supabase
 from app.schemas.hr import JobCreate, JobResponse, DepartmentCreate, DepartmentResponse
 from app.schemas.company import CompanyCreate, CompanyResponse, EmployeeResponse, EmployeeCreate
 from app.schemas.job import Job
+from app.schemas.application import JobApplicationResponse, HRJobApplicationCreate
 from app.routes.auth import get_current_user
 from app.decorators import cached_endpoint, invalidate_cache
+from typing import List, Optional
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
@@ -242,11 +244,161 @@ def get_employee_profile(employee_id: str, current=Depends(require_hr_role)):
 def get_departments(company_id: str = None, current=Depends(require_hr_role)):
     try:
         query = supabase.table('departments').select('*')
-        
+
         if company_id:
             query = query.eq('company_id', company_id)
-        
+
         response = query.execute()
         return [DepartmentResponse(**dept) for dept in response.data]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch departments: {str(e)}")
+
+
+# Applications Management Endpoints
+@router.get("/applications", response_model=List[JobApplicationResponse])
+@cached_endpoint("hr_applications")
+def get_applications(
+    status: Optional[str] = None,
+    job_id: Optional[str] = None,
+    current=Depends(require_hr_role)
+):
+    try:
+        # Get HR user's company_id from user metadata
+        hr_user = current['user']
+        company_id = hr_user.user_metadata.get('company_id')
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="HR user must be associated with a company")
+
+        # Build query to get applications for jobs posted by HR's company
+        query = supabase.table('applications').select("""
+            *,
+            job_postings!inner(title, department_id, location, employment_type, salary_range, created_by),
+            candidates!inner(name, email, phone)
+        """).eq('job_postings.created_by', hr_user.id)
+
+        if status:
+            query = query.eq('screening_status', status)
+
+        if job_id:
+            query = query.eq('job_id', job_id)
+
+        response = query.order('applied_at', desc=True).execute()
+
+        return [JobApplicationResponse(**app) for app in response.data]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
+
+
+@router.patch("/applications/{application_id}")
+def update_application_status(
+    application_id: str,
+    screening_status: str,
+    current=Depends(require_hr_role)
+):
+    try:
+        # Validate status
+        valid_statuses = ['Under Review', 'Shortlisted', 'Rejected', 'Hired']
+        if screening_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+
+        # Get HR user's company_id from user metadata
+        hr_user = current['user']
+        company_id = hr_user.user_metadata.get('company_id')
+
+        if not company_id:
+            raise HTTPException(status_code=400, detail="HR user must be associated with a company")
+
+        # Update application status - ensure HR can only update applications for their company's jobs
+        response = supabase.table('applications').update({
+            'screening_status': screening_status,
+            'updated_at': 'now()'
+        }).eq('id', application_id).select("""
+            *,
+            job_postings!inner(created_by)
+        """).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        # Verify the application belongs to a job created by this HR user
+        application = response.data[0]
+        if application['job_postings']['created_by'] != hr_user.id:
+            raise HTTPException(status_code=403, detail="Access denied. You can only update applications for jobs you created.")
+
+        # Invalidate cache
+        invalidate_cache("hr_applications")
+
+        return {"message": "Application status updated successfully", "application": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update application status: {str(e)}")
+
+
+@router.get("/companies/{company_id}/jobs", response_model=List[JobResponse])
+@cached_endpoint("hr_company_jobs")
+def get_jobs_by_company(company_id: str, current=Depends(require_hr_role)):
+    try:
+        # First verify company exists
+        company_response = supabase.table('companies').select('*').eq('id', company_id).execute()
+        if not company_response.data:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+        # Get jobs for the company by joining with departments
+        response = supabase.table('job_postings').select("""
+            *,
+            departments!inner(company_id, name)
+        """).eq('departments.company_id', company_id).execute()
+
+        return [JobResponse(**job) for job in response.data]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch jobs: {str(e)}")
+
+
+@router.post("/applications", response_model=JobApplicationResponse)
+def create_application(application: HRJobApplicationCreate, current=Depends(require_hr_role)):
+    try:
+        # Check if job exists and is open
+        job_response = supabase.table("job_postings").select("*").eq("id", application.job_id).eq("status", "open").execute()
+        if not job_response.data:
+            raise HTTPException(status_code=404, detail="Job not found or not open for applications")
+
+        # Check if candidate profile exists
+        candidate_response = supabase.table("candidates").select("*").eq("id", application.candidate_id).execute()
+        if not candidate_response.data:
+            raise HTTPException(status_code=400, detail="Candidate profile not found")
+
+        # Check if already applied
+        existing_application = supabase.table("applications").select("*").eq("job_id", application.job_id).eq("candidate_id", application.candidate_id).execute()
+        if existing_application.data:
+            raise HTTPException(status_code=400, detail="Candidate has already applied for this job")
+
+        # Create application
+        application_data = {
+            'job_id': application.job_id,
+            'candidate_id': application.candidate_id,
+            'cover_letter': application.cover_letter,
+            'resume_url': application.resume_url,
+            'additional_info': application.additional_info,
+            'screening_status': 'Under Review'
+        }
+
+        response = supabase.table("applications").insert(application_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create application")
+
+        created_application = response.data[0]
+        # Invalidate cache
+        invalidate_cache("hr_applications")
+
+        return JobApplicationResponse(**created_application)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create application: {str(e)}")

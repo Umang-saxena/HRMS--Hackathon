@@ -33,6 +33,11 @@ sentence-transformers
 
 # Backend Integration
 supabase
+uvicorn[standard]==0.24.0
+
+redis==5.0.1
+upstash-redis
+requests
 python-dotenv
 psycopg2-binary
 requests

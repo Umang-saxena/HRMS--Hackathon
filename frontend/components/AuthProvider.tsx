@@ -29,9 +29,12 @@ const getRolePage = (role: string) => {
     case 'hr':
       return '/hr/employees';
     case 'employee':
+      
       return '/employee';
     case 'candidate':
       return '/candidate';
+    case 'interviewer':
+      return '/interviews';
     default:
       return '/';
   }

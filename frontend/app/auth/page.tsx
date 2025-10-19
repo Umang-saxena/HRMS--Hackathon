@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Mail, Lock, User, Building } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,19 +12,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
-const getRolePage = (role: string) => {
-  switch (role) {
-    case 'admin':
-      return '/admin';
-    case 'hr':
-      return '/hr/employees';
-    case 'employee':
-      return '/employee';
-    case 'candidate':
-      return '/candidate';
-    default:
-      return '/';
-  }
+
+// ✅ Role mapping function — clean and future-proof
+const getRolePage = (role: string | undefined) => {
+  const normalized = (role || '').trim().toLowerCase();
+
+  // Map of known roles
+  const map: Record<string, string> = {
+    admin: '/admin',
+    hr: '/hr/employees',
+    employee: '/employee',
+    interviewer: '/interviews', // 👈 new route for interviewers
+    candidate: '/candidate',
+  };
+
+  // fallback mapping if unknown role
+  if (map[normalized]) return map[normalized];
+  if (normalized.includes('interview')) return '/interviews';
+  return '/';
 };
 
 export default function AuthPage() {
@@ -45,30 +50,36 @@ export default function AuthPage() {
     role: 'employee',
   });
 
+  // 🔍 Check existing session & auth state changes
   useEffect(() => {
-    // Check if user is already authenticated
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        const role = session.user.user_metadata?.role || 'employee';
+        const rawRole = session.user.user_metadata?.role;
+        const role = (rawRole || '').trim().toLowerCase();
+        console.log('🔍 Authenticated (existing session) Role:', role);
         const rolePage = getRolePage(role);
-        router.push(rolePage);
+        console.log('➡️ Redirecting to:', rolePage);
+        router.replace(rolePage);
       }
     };
     checkAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        const role = session.user.user_metadata?.role || 'employee';
+        const rawRole = session.user.user_metadata?.role;
+        const role = (rawRole || '').trim().toLowerCase();
+        console.log('🔍 Authenticated (onAuthStateChange) Role:', role);
         const rolePage = getRolePage(role);
-        router.push(rolePage);
+        console.log('➡️ Redirecting to:', rolePage);
+        router.replace(rolePage);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
 
+  // 🟦 Login handler
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -76,29 +87,33 @@ export default function AuthPage() {
     try {
       const response = await fetch('http://localhost:8000/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginData),
       });
 
       const data = await response.json();
+      console.log('🧾 Login API response:', data);
 
       if (response.ok && data.session) {
-        // Set the session in Supabase client
-        await supabase.auth.setSession({
+        // Set Supabase session
+        const { data: setData, error: setError } = await supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
 
+        if (setError) console.error('Supabase setSession error:', setError);
+
+        const backendRole = (data.role || '').trim().toLowerCase();
+        console.log('🔍 Backend Role:', backendRole);
+
+        const rolePage = getRolePage(backendRole);
+        console.log('➡️ Redirecting immediately to:', rolePage);
         toast({
           title: 'Login successful',
           description: `Welcome back! Role: ${data.role}`,
         });
 
-        // Redirect to role-specific page
-        const rolePage = getRolePage(data.role);
-        router.push(rolePage);
+        router.replace(rolePage);
       } else {
         toast({
           title: 'Login failed',
@@ -107,6 +122,7 @@ export default function AuthPage() {
         });
       }
     } catch (error) {
+      console.error('Login error:', error);
       toast({
         title: 'Error',
         description: 'Failed to connect to server',
@@ -117,6 +133,7 @@ export default function AuthPage() {
     }
   };
 
+  // 🟩 Signup handler
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -124,13 +141,12 @@ export default function AuthPage() {
     try {
       const response = await fetch('http://localhost:8000/auth/signup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(signupData),
       });
 
       const data = await response.json();
+      console.log('🧾 Signup API response:', data);
 
       if (response.ok) {
         toast({
@@ -146,6 +162,7 @@ export default function AuthPage() {
         });
       }
     } catch (error) {
+      console.error('Signup error:', error);
       toast({
         title: 'Error',
         description: 'Failed to connect to server',
@@ -156,6 +173,7 @@ export default function AuthPage() {
     }
   };
 
+  // 🟨 Google login handler
   const handleGoogleLogin = async () => {
     try {
       const response = await fetch('http://localhost:8000/auth/google');
@@ -173,6 +191,7 @@ export default function AuthPage() {
     }
   };
 
+  // 🧭 UI
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -188,6 +207,7 @@ export default function AuthPage() {
             <CardTitle className="text-2xl">Welcome</CardTitle>
             <CardDescription>Sign in to your account or create a new one</CardDescription>
           </CardHeader>
+
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
@@ -195,8 +215,10 @@ export default function AuthPage() {
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
               </TabsList>
 
+              {/* LOGIN TAB */}
               <TabsContent value="login" className="space-y-4">
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {/* Email */}
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>
                     <div className="relative">
@@ -213,6 +235,7 @@ export default function AuthPage() {
                     </div>
                   </div>
 
+                  {/* Password */}
                   <div className="space-y-2">
                     <Label htmlFor="login-password">Password</Label>
                     <div className="relative">
@@ -236,11 +259,16 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700" disabled={isLoading}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                    disabled={isLoading}
+                  >
                     {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
                 </form>
 
+                {/* Divider */}
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
                     <span className="w-full border-t border-slate-200" />
@@ -267,8 +295,10 @@ export default function AuthPage() {
                 </Button>
               </TabsContent>
 
+              {/* SIGNUP TAB */}
               <TabsContent value="signup" className="space-y-4">
                 <form onSubmit={handleSignup} className="space-y-4">
+                  {/* Email */}
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">Email</Label>
                     <div className="relative">
@@ -285,6 +315,7 @@ export default function AuthPage() {
                     </div>
                   </div>
 
+                  {/* Password */}
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">Password</Label>
                     <div className="relative">
@@ -308,6 +339,7 @@ export default function AuthPage() {
                     </div>
                   </div>
 
+                  {/* Role */}
                   <div className="space-y-2">
                     <Label htmlFor="signup-role">Role</Label>
                     <div className="relative">
@@ -321,6 +353,7 @@ export default function AuthPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="employee">Employee</SelectItem>
+                          <SelectItem value="interviewer">Interviewer</SelectItem>
                           <SelectItem value="hr">HR Manager</SelectItem>
                           <SelectItem value="admin">Administrator</SelectItem>
                           <SelectItem value="candidate">Job Candidate</SelectItem>
@@ -329,7 +362,11 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700" disabled={isLoading}>
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                    disabled={isLoading}
+                  >
                     {isLoading ? 'Creating account...' : 'Create Account'}
                   </Button>
                 </form>
