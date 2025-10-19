@@ -38,6 +38,7 @@ export default function AdminPerformancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     employeeId: '',
@@ -118,7 +119,11 @@ export default function AdminPerformancePage() {
 
   // helper: compute overall as sum of subscores
   function computeOverall() {
-    const sum = Number(form.quality || 0) + Number(form.productivity || 0) + Number(form.teamwork || 0) + Number(form.communication || 0);
+    const sum =
+      Number(form.quality || 0) +
+      Number(form.productivity || 0) +
+      Number(form.teamwork || 0) +
+      Number(form.communication || 0);
     return sum;
   }
 
@@ -165,42 +170,71 @@ export default function AdminPerformancePage() {
     return true;
   }
 
-  // Create or update
-    async function handleCreateOrUpdate() {
+  // Create or update (with optimistic update and better UI feedback)
+  async function handleCreateOrUpdate() {
     if (!validateFormLocally()) return;
 
-    const payload = {
-  employee_id: form.employeeId,
-  reviewer_id: form.reviewerId,
-  review_period: form.review_period,
-  quality_score: Math.round(Number(form.quality || 0)),
-  productivity_score: Math.round(Number(form.productivity || 0)),
-  teamwork_score: Math.round(Number(form.teamwork || 0)),
-  communication_score: Math.round(Number(form.communication || 0)),
-  overall_score:
-    Math.round(Number(form.quality || 0)) +
-    Math.round(Number(form.productivity || 0)) +
-    Math.round(Number(form.teamwork || 0)) +
-    Math.round(Number(form.communication || 0)),
-  comments: form.comments || null,
-};
+    const rounded = {
+      quality_score: Math.round(Number(form.quality || 0)),
+      productivity_score: Math.round(Number(form.productivity || 0)),
+      teamwork_score: Math.round(Number(form.teamwork || 0)),
+      communication_score: Math.round(Number(form.communication || 0)),
+    };
+    const overall = rounded.quality_score + rounded.productivity_score + rounded.teamwork_score + rounded.communication_score;
 
+    const payload = {
+      employee_id: form.employeeId,
+      reviewer_id: form.reviewerId,
+      review_period: form.review_period,
+      quality_score: rounded.quality_score,
+      productivity_score: rounded.productivity_score,
+      teamwork_score: rounded.teamwork_score,
+      communication_score: rounded.communication_score,
+      overall_score: overall,
+      comments: form.comments || null,
+    };
 
     try {
+      setSaving(true);
+
       if (editingId) {
-        const { error } = await supabase.from('performance_scores').update({
-          quality_score: payload.quality_score,
-          productivity_score: payload.productivity_score,
-          teamwork_score: payload.teamwork_score,
-          communication_score: payload.communication_score,
-          overall_score: payload.overall_score,
-          review_period: payload.review_period,
-          comments: payload.comments,
-        }).eq('id', editingId);
+        const { error } = await supabase
+          .from('performance_scores')
+          .update({
+            quality_score: payload.quality_score,
+            productivity_score: payload.productivity_score,
+            teamwork_score: payload.teamwork_score,
+            communication_score: payload.communication_score,
+            overall_score: payload.overall_score,
+            review_period: payload.review_period,
+            comments: payload.comments,
+          })
+          .eq('id', editingId);
 
         if (error) throw error;
+
+        // Optimistically update local state so UI reflects change immediately
+        setPerformances((prev) =>
+          prev.map((p) =>
+            p.id === editingId
+              ? {
+                  ...p,
+                  quality_score: payload.quality_score,
+                  productivity_score: payload.productivity_score,
+                  teamwork_score: payload.teamwork_score,
+                  communication_score: payload.communication_score,
+                  overall_score: payload.overall_score,
+                  review_period: payload.review_period,
+                  comments: payload.comments,
+                  updated_at: new Date().toISOString(),
+                }
+              : p
+          )
+        );
+
         toast({ title: 'Updated' });
       } else {
+        // Create via your server API (keeps your existing server-side validation/authorisation)
         const resp = await fetch('/api/admin/create-performance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -227,19 +261,29 @@ export default function AdminPerformancePage() {
           throw new Error(body?.error || `HTTP ${resp.status}`);
         }
 
+        // If the server returned the created row, push it into local state
+        if (Array.isArray(body.results) && body.results[0]) {
+          setPerformances((prev) => [body.results[0], ...prev]);
+        } else if (body.id) {
+          setPerformances((prev) => [{ ...(body as any) } as Perf, ...prev]);
+        } else {
+          // fallback: reload
+          await loadData();
+        }
+
         toast({ title: 'Created' });
       }
 
-      // reset and reload
+      // reset and clear editing state
       setForm((s) => ({ employeeId: '', reviewerId: s.reviewerId, review_period: '', quality: 0, productivity: 0, teamwork: 0, communication: 0, comments: '' }));
       setEditingId(null);
-      await loadData();
     } catch (err: any) {
       console.error('Create/Update error (client):', err);
       toast({ title: 'Failed', description: err?.message || String(err), variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   }
-
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this record?')) return;
@@ -247,7 +291,8 @@ export default function AdminPerformancePage() {
       const { error } = await supabase.from('performance_scores').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'Deleted' });
-      await loadData();
+      // optimistic local removal
+      setPerformances((prev) => prev.filter((p) => p.id !== id));
     } catch (err: any) {
       console.error('Delete error:', JSON.stringify(err, null, 2));
       toast({ title: 'Failed to delete', variant: 'destructive' });
@@ -260,10 +305,10 @@ export default function AdminPerformancePage() {
       employeeId: p.employee_id,
       reviewerId: p.reviewer_id,
       review_period: p.review_period || '',
-      quality: Number(p.quality_score || 0),
-      productivity: Number(p.productivity_score || 0),
-      teamwork: Number(p.teamwork_score || 0),
-      communication: Number(p.communication_score || 0),
+      quality: Number(p.quality_score ?? 0),
+      productivity: Number(p.productivity_score ?? 0),
+      teamwork: Number(p.teamwork_score ?? 0),
+      communication: Number(p.communication_score ?? 0),
       comments: p.comments || '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -315,22 +360,62 @@ export default function AdminPerformancePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
             <div>
               <label className="block text-xs text-slate-600 mb-1">Quality (0 - 25)</label>
-              <Input type="number" min={0} max={25} value={form.quality} onChange={(e) => setForm((s) => ({ ...s, quality: Number(e.target.value) }))} placeholder="Quality (max 25)" />
+              <Input
+                type="number"
+                min={0}
+                max={25}
+                value={form.quality}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(25, Number(e.target.value || 0)));
+                  setForm((s) => ({ ...s, quality: v }));
+                }}
+                placeholder="Quality (max 25)"
+              />
             </div>
 
             <div>
               <label className="block text-xs text-slate-600 mb-1">Productivity (0 - 25)</label>
-              <Input type="number" min={0} max={25} value={form.productivity} onChange={(e) => setForm((s) => ({ ...s, productivity: Number(e.target.value) }))} placeholder="Productivity (max 25)" />
+              <Input
+                type="number"
+                min={0}
+                max={25}
+                value={form.productivity}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(25, Number(e.target.value || 0)));
+                  setForm((s) => ({ ...s, productivity: v }));
+                }}
+                placeholder="Productivity (max 25)"
+              />
             </div>
 
             <div>
               <label className="block text-xs text-slate-600 mb-1">Teamwork (0 - 25)</label>
-              <Input type="number" min={0} max={25} value={form.teamwork} onChange={(e) => setForm((s) => ({ ...s, teamwork: Number(e.target.value) }))} placeholder="Teamwork (max 25)" />
+              <Input
+                type="number"
+                min={0}
+                max={25}
+                value={form.teamwork}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(25, Number(e.target.value || 0)));
+                  setForm((s) => ({ ...s, teamwork: v }));
+                }}
+                placeholder="Teamwork (max 25)"
+              />
             </div>
 
             <div>
               <label className="block text-xs text-slate-600 mb-1">Communication (0 - 25)</label>
-              <Input type="number" min={0} max={25} value={form.communication} onChange={(e) => setForm((s) => ({ ...s, communication: Number(e.target.value) }))} placeholder="Communication (max 25)" />
+              <Input
+                type="number"
+                min={0}
+                max={25}
+                value={form.communication}
+                onChange={(e) => {
+                  const v = Math.max(0, Math.min(25, Number(e.target.value || 0)));
+                  setForm((s) => ({ ...s, communication: v }));
+                }}
+                placeholder="Communication (max 25)"
+              />
             </div>
           </div>
 
@@ -342,11 +427,17 @@ export default function AdminPerformancePage() {
           <div className="flex gap-2 mt-3">
             {editingId ? (
               <>
-                <Button onClick={handleCreateOrUpdate}>Save</Button>
-                <Button variant="ghost" onClick={() => { setEditingId(null); setForm((s) => ({ employeeId: '', reviewerId: s.reviewerId, review_period: '', quality: 0, productivity: 0, teamwork: 0, communication: 0, comments: '' })); }}>Cancel</Button>
+                <Button onClick={handleCreateOrUpdate} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save'}
+                </Button>
+                <Button variant="ghost" onClick={() => { setEditingId(null); setForm((s) => ({ employeeId: '', reviewerId: s.reviewerId, review_period: '', quality: 0, productivity: 0, teamwork: 0, communication: 0, comments: '' })); }}>
+                  Cancel
+                </Button>
               </>
             ) : (
-              <Button onClick={handleCreateOrUpdate}><Plus className="w-4 h-4 mr-2" /> Create</Button>
+              <Button onClick={handleCreateOrUpdate} disabled={saving}>
+                <Plus className="w-4 h-4 mr-2" /> {saving ? 'Creating...' : 'Create'}
+              </Button>
             )}
           </div>
         </CardContent>

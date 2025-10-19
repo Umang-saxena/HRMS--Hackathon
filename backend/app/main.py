@@ -2,6 +2,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from app.db import Base, engine
+from app.models import user
+from app.models import performance
+
 import os
 
 load_dotenv()
@@ -28,12 +32,16 @@ app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
 app.add_middleware(CacheMiddleware, cache_ttl=300)
 
 # CORS settings
+# backend/main.py (example)
+from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_methods=["*"],
+    allow_origins=["http://localhost:3000"],  # your frontend origin(s)
+    allow_credentials=True,
+    allow_methods=["GET","POST","PUT","DELETE","OPTIONS"],
     allow_headers=["*"],
 )
+
 
 # Root & health endpoints
 @app.get("/")
