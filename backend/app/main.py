@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 # from app.models import user, performance
 import os
 
+# Import Celery
+# from backend.ML_models.ai_video_interview.utils.queue_utils import celery_app
+
 # Load .env file from the 'backend' directory
 # Ensure this is called before other modules that might need env vars
 load_dotenv()
