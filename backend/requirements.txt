@@ -1,19 +1,13 @@
-# ------------------------------
 # Core Framework & Server
-# ------------------------------
 fastapi[standard]
-uvicorn[standard]
+uvicorn[standard]==0.24.0
 pydantic
 
-# ------------------------------
 # Task Queue (Celery & Redis)
-# ------------------------------
 celery
 redis
 
-# ------------------------------
 # Data Science / ML
-# ------------------------------
 pandas
 numpy<2
 scikit-learn
@@ -22,39 +16,23 @@ matplotlib
 seaborn
 joblib
 
-# ------------------------------
-# Deep Learning Stack (Install separately)
-# ------------------------------
-torch==2.2.2
-# torchaudio==2.2.2
+# Deep Learning Stack
+torch==2.1.0
 librosa
 soundfile
 
-# ------------------------------
 # Audio & Speech Analysis
-# ------------------------------
 silero-vad
 faster_whisper
-# ------------------------------
+
 # LangChain & LLM Tools
-# ------------------------------
-langchain
-langchain-core
-langchain-groq
+langchain==0.1.16
+langchain-core==0.1.44
+langchain-groq==0.1.2
 sentence-transformers
 
-# ------------------------------
 # Backend Integration
-# ------------------------------
 supabase
-uvicorn[standard]==0.24.0
-
-redis==5.0.1
-upstash-r=======
 python-dotenv
 psycopg2-binary
-pandas
-scikit-learn
-joblib
-
 requests

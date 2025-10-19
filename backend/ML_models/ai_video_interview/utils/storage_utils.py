@@ -1,8 +1,6 @@
-# ai_video_interview/utils/storage_utils.py
 import os                                       # For accessing environment variables
 from supabase import create_client, Client      # Supabase Python client
 
-# Initialize the Supabase client from environment variables
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase: Client = create_client(url, key)
