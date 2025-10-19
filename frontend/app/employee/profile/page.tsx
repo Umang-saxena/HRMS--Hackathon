@@ -1,11 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
 import { User, Mail, Phone, Building2, Calendar, DollarSign, CheckCircle } from 'lucide-react';
+
+import { User, Mail, Phone, Building2, Calendar, DollarSign, CheckCircle, Edit, Save, X } from 'lucide-react';
+
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+
+
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+
 
 type EmployeeRow = {
   id: string;
@@ -28,19 +38,35 @@ export default function ProfilePage() {
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+
   useEffect(() => {
     loadEmployeeProfile();
+
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState<Partial<EmployeeRow>>({});
+  const { toast } = useToast();
+
+  useEffect(() => {
+    (async () => {
+      await loadEmployeeProfile();
+    })();
+
   }, []);
 
   async function loadEmployeeProfile() {
     setLoading(true);
     try {
+
       // 1) Get Supabase session
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error('Session error:', sessionError);
         throw sessionError;
       }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+
 
       const session = sessionData?.session;
       if (!session) {
@@ -56,13 +82,16 @@ export default function ProfilePage() {
         return;
       }
 
+
       // 2) Fetch employee row by email
+
       const { data: emp, error: empErr } = await supabase
         .from('employees')
         .select(
           'id, first_name, last_name, email, phone, department_id, company_id, role, date_of_joining, salary, employment_status, created_at'
         )
         .eq('email', userEmail)
+
         .maybeSingle(); // safe when 0 rows
 
       if (empErr) {
@@ -71,6 +100,11 @@ export default function ProfilePage() {
         return;
       }
 
+
+        .maybeSingle();
+
+      if (empErr) throw empErr;
+
       if (!emp) {
         console.warn('No employee record found for:', userEmail);
         setEmployee(null);
@@ -78,6 +112,7 @@ export default function ProfilePage() {
       }
 
       setEmployee(emp);
+
 
       // 3) If department_id / company_id present, fetch names (non-blocking)
       const fetchExtras: Promise<any>[] = [];
@@ -93,10 +128,24 @@ export default function ProfilePage() {
               if (!res.error && res.data) setDepartmentName((res.data as any).name || null);
             })
             .catch(() => {})
+
+      setEditData(emp);
+
+      // Fetch department & company names (if exist)
+      const extras: Promise<void>[] = [];
+
+      if (emp.department_id) {
+        extras.push(
+          (async () => {
+            const res = await supabase.from('departments').select('name').eq('id', emp.department_id).maybeSingle();
+            if (!res.error && res.data) setDepartmentName((res.data as any).name);
+          })()
+
         );
       }
 
       if (emp.company_id) {
+
         fetchExtras.push(
           supabase
             .from('companies')
@@ -113,9 +162,49 @@ export default function ProfilePage() {
       await Promise.all(fetchExtras);
     } catch (err: any) {
       console.error('Error fetching employee profile:', JSON.stringify(err, null, 2));
+
+        extras.push(
+          (async () => {
+            const res = await supabase.from('companies').select('name').eq('id', emp.company_id).maybeSingle();
+            if (!res.error && res.data) setCompanyName((res.data as any).name);
+          })()
+        );
+      }
+
+      await Promise.all(extras);
+    } catch (err) {
+      console.error('Error fetching employee profile:', err);
+      toast({ title: 'Error loading profile', variant: 'destructive' });
+
       setEmployee(null);
     } finally {
       setLoading(false);
+    }
+  }
+
+
+  async function handleSaveChanges() {
+    if (!employee) return;
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          first_name: editData.first_name,
+          last_name: editData.last_name,
+          phone: editData.phone,
+          role: editData.role,
+          date_of_joining: editData.date_of_joining,
+        })
+        .eq('id', employee.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Profile updated successfully 🎉' });
+      setEditMode(false);
+      await loadEmployeeProfile();
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast({ title: 'Failed to update profile', variant: 'destructive' });
     }
   }
 
@@ -126,11 +215,41 @@ export default function ProfilePage() {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(num);
   };
 
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Profile</h1>
         <p className="text-slate-600 mt-1">Your personal and job details</p>
+
+  const handleChange = (field: keyof EmployeeRow, value: any) => {
+    setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Profile</h1>
+          <p className="text-slate-600 mt-1">Your personal and job details</p>
+        </div>
+        {!loading && employee && (
+          <Button
+            onClick={() => (editMode ? handleSaveChanges() : setEditMode(true))}
+            className={editMode ? 'bg-green-600 hover:bg-green-700' : ''}
+          >
+            {editMode ? (
+              <>
+                <Save className="w-4 h-4 mr-2" /> Save
+              </>
+            ) : (
+              <>
+                <Edit className="w-4 h-4 mr-2" /> Edit
+              </>
+            )}
+          </Button>
+        )}
+
       </div>
 
       <Card className="border-slate-200 shadow-sm">
@@ -149,6 +268,7 @@ export default function ProfilePage() {
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+
                 {/* Name */}
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-slate-500" />
@@ -213,14 +333,119 @@ export default function ProfilePage() {
                   <strong>Joined:</strong>
                   <span>{employee.created_at ? new Date(employee.created_at).toLocaleDateString() : '—'}</span>
                 </div>
+
+                {/* First Name */}
+                <div>
+                  <label className="font-medium">First Name</label>
+                  {editMode ? (
+                    <Input
+                      value={editData.first_name || ''}
+                      onChange={(e) => handleChange('first_name', e.target.value)}
+                    />
+                  ) : (
+                    <p>{employee.first_name}</p>
+                  )}
+                </div>
+
+                {/* Last Name */}
+                <div>
+                  <label className="font-medium">Last Name</label>
+                  {editMode ? (
+                    <Input
+                      value={editData.last_name || ''}
+                      onChange={(e) => handleChange('last_name', e.target.value)}
+                    />
+                  ) : (
+                    <p>{employee.last_name}</p>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="font-medium">Email</label>
+                  <p>{employee.email}</p>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="font-medium">Phone</label>
+                  {editMode ? (
+                    <Input
+                      value={editData.phone || ''}
+                      onChange={(e) => handleChange('phone', e.target.value)}
+                    />
+                  ) : (
+                    <p>{employee.phone || '—'}</p>
+                  )}
+                </div>
+
+                {/* Role */}
+                <div>
+                  <label className="font-medium">Role</label>
+                  {editMode ? (
+                    <Input
+                      value={editData.role || ''}
+                      onChange={(e) => handleChange('role', e.target.value)}
+                    />
+                  ) : (
+                    <p>{employee.role || '—'}</p>
+                  )}
+                </div>
+
+                {/* Date of Joining */}
+                <div>
+                  <label className="font-medium">Date of Joining</label>
+                  {editMode ? (
+                    <Input
+                      type="date"
+                      value={editData.date_of_joining || ''}
+                      onChange={(e) => handleChange('date_of_joining', e.target.value)}
+                    />
+                  ) : (
+                    <p>
+                      {employee.date_of_joining
+                        ? new Date(employee.date_of_joining).toLocaleDateString()
+                        : '—'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Department / Company */}
+                <p>
+                  <strong>Department:</strong> {departmentName || '—'}
+                </p>
+                <p>
+                  <strong>Company:</strong> {companyName || '—'}
+                </p>
+
+                <p>
+                  <strong>Salary:</strong> {formatCurrency(employee.salary)}
+                </p>
+
+                <p>
+                  <strong>Status:</strong>{' '}
+                  <Badge variant="outline" className="capitalize">
+                    {employee.employment_status || 'active'}
+                  </Badge>
+                </p>
+
               </div>
 
               <Separator />
 
+
               {/* Optional: small meta box */}
               <div className="text-sm text-slate-700">
                 <div><strong>Employee ID:</strong> {employee.id}</div>
-                <div className="mt-1 text-xs text-slate-500">If any detail is incorrect, contact HR to update your record.</div>
+
+              <div className="text-sm text-slate-700">
+                <p>
+                  <strong>Employee ID:</strong> {employee.id}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  If any detail is incorrect, contact HR to update your record.
+                </p>
+
               </div>
             </div>
           )}
