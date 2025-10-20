@@ -1,5 +1,7 @@
-# Use a lightweight Python base image
-FROM python:3.11-slim
+# =======================
+# Stage 1: Builder
+# =======================
+FROM python:3.11-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -8,27 +10,39 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y build-essential
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency list and install Python packages
+# Copy only requirements to leverage Docker cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the entire backend code
+# Install Python packages in /install
+RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
+
+# Copy the backend code
 COPY . .
 
-# Copy your full environment file into the container
-COPY .env /app/.env
+# =======================
+# Stage 2: Runtime
+# =======================
+FROM python:3.11-slim
 
-# Set environment variable to tell python-dotenv where to look
-ENV DOTENV_PATH=/app/.env
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy app code
+COPY --from=builder /app /app
 
 # Expose FastAPI port
 EXPOSE 8000
 
-# Environment variable for Upstash Redis
-# ENV REDIS_URL=""
-
-# Default command (overridden in docker-compose)
+# Default command to run FastAPI
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
