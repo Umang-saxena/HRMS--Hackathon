@@ -18,10 +18,10 @@ export default function JobCard({ job, onViewDetails }: JobCardProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-lg font-semibold mb-1">{job.title}</h3>
-            <div className="flex items-center gap-2 text-muted-foreground">
+            {/* <div className="flex items-center gap-2 text-muted-foreground">
               <Building className="h-4 w-4" />
               <span className="text-sm">{job.company}</span>
-            </div>
+            </div> */}
           </div>
           <Badge variant="secondary">{job.type}</Badge>
         </div>
