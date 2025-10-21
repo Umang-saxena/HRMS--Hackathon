@@ -36,16 +36,12 @@ def analyze_audio_metrics(audio_file_path: str, transcript: str) -> dict:
 
         wav = read_audio(audio_file_path, sampling_rate=16000)
         
-        # We can still use librosa to get the total duration easily.
-        # We pass wav.numpy() to convert the PyTorch tensor to a NumPy array for librosa.
+        
         total_duration_sec = librosa.get_duration(y=wav.numpy(), sr=16000)
         
-        # --- NEW: Get speech timestamps using Silero VAD ---
-        # This function returns a list of dictionaries with 'start' and 'end' timestamps in samples.
         speech_timestamps = get_speech_timestamps(wav, silero_model, sampling_rate=16000)
         
-        # Calculate the total speaking duration by summing the duration of all speech segments.
-        # We convert from samples to seconds by dividing by the sampling rate.
+        
         speaking_duration_sec = sum(
             (segment['end'] - segment['start']) / 16000.0 for segment in speech_timestamps
         )
@@ -74,7 +70,6 @@ def analyze_audio_metrics(audio_file_path: str, transcript: str) -> dict:
 
 
 if __name__ == "__main__":
-    # This testing block remains the same and will now use the new Silero implementation.
     sample_audio_path = "backend\\ML_models\\ai_video_interview\\interview_agent\\Record (online-voice-recorder.com).mp3" 
     
     print("Transcribing audio for test...")
