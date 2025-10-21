@@ -1,9 +1,8 @@
 import os
 import json
 from langchain_groq import ChatGroq
-from prompt_templates import TRANSCRIPT_ANALYSIS_PROMPT
+from .prompt_templates import TRANSCRIPT_ANALYSIS_PROMPT
 from dotenv import load_dotenv
-
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:

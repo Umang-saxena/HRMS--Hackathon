@@ -1,14 +1,10 @@
-# celery_worker.py
-import os
-from dotenv import load_dotenv
+# celery_worker.py (shim)
+"""Shim at repository root to preserve legacy imports/CLI usage.
 
-# Load environment variables BEFORE importing the Celery app
-# Make sure the .env file is in the root directory
-load_dotenv() 
+It delegates to the real worker module under backend/ so external tools
+that rely on `celery_worker` at project root keep working.
+"""
+from backend.celery_worker import celery_app  # re-export
 
-# Import the Celery app instance from your module
-# The path is relative to the project root
-from backend.ML_models.ai_video_interview.utils.queue_utils import celery_app
-
-# This file is intentionally simple. Its job is just to make the Celery app instance
-# available for the Celery CLI to run.
+# Expose name expected by Celery when used as `-A celery_worker`
+__all__ = ["celery_app"]

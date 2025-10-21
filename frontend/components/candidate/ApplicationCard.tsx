@@ -3,6 +3,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Briefcase, MapPin, Calendar, Clock } from 'lucide-react';
 import { getStatusConfig } from '@/data/mockData';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+
 
 interface ApplicationCardProps {
   application: Application;
@@ -60,6 +63,13 @@ export default function ApplicationCard({ application }: ApplicationCardProps) {
             year: 'numeric' 
           })}
         </p>
+
+        {application.status === 'shortlisted' && (
+          <Link href="/candidate/interview">
+            <Button>Start Interview</Button>
+          </Link>
+        )}
+
       </CardContent>
     </Card>
   );
