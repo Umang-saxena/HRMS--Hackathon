@@ -7,13 +7,11 @@ import {
   LayoutDashboard,
   Users,
   GraduationCap,
+  DollarSign,
   TrendingUp,
   Brain,
   Calendar,
   Building2,
-  Bot,
-  FileText,
-  UserCheck,
   ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,17 +19,16 @@ import Header from './Header';
 import { useAuth } from '@/components/AuthProvider';
 
 const navigation = [
-  { name: 'Dashboard', href: '/hr', icon: LayoutDashboard },
+  // { name: 'Dashboard', href: '/hr', icon: LayoutDashboard },
   { name: 'Employees', href: '/hr/employees', icon: Users },
   { name: 'Departments', href: '/hr/departments', icon: Building2 },
   { name: 'Applications', href: '/hr/applications', icon: ClipboardList },
-  { name: 'Learning & Development', href: '/hr/learning', icon: GraduationCap },
+  // { name: 'Learning & Development', href: '/hr/learning', icon: GraduationCap },
   { name: 'Performance Reviews', href: '/hr/performance', icon: TrendingUp },
-  { name: 'AI Insights', href: '/hr/insights', icon: Brain },
+  // { name: 'AI Insights', href: '/hr/insights', icon: Brain },
   { name: 'Attendance', href: '/hr/attendance', icon: Calendar },
-  { name: 'AI Assistant', href: '/hr/assistant', icon: Bot },
-  { name: 'Recruitment', href: '/hr/recruitment', icon: UserCheck },
-  { name: 'Reports', href: '/hr/reports', icon: FileText },
+  { name: 'Payroll', href: '/admin/payroll', icon: DollarSign },
+
 ];
 
 interface HrLayoutProps {

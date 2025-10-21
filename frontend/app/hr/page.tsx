@@ -20,65 +20,88 @@ export default function Home() {
   });
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [topCourses, setTopCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
   async function loadDashboardData() {
-    const { data: employees } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('status', 'active');
+    setLoading(true);
+    setError(null);
+    try {
+      const [empRes, coursesRes, insightsRes, reviewsRes] = await Promise.all([
+        supabase.from('employees').select('*').eq('status', 'active'),
+        supabase
+          .from('employee_courses')
+          .select('*, learning_courses(*)')
+          .in('status', ['enrolled', 'in_progress']),
+        supabase
+          .from('ai_insights')
+          .select('*')
+          .eq('status', 'new')
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase.from('performance_reviews').select('overall_rating'),
+      ]);
 
-    const { data: courses } = await supabase
-      .from('employee_courses')
-      .select('*, learning_courses(*)')
-      .in('status', ['enrolled', 'in_progress']);
-
-    const { data: insightsData } = await supabase
-      .from('ai_insights')
-      .select('*')
-      .eq('status', 'new')
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    const { data: reviews } = await supabase
-      .from('performance_reviews')
-      .select('overall_rating');
-
-    setStats({
-      totalEmployees: employees?.length || 0,
-      activeCourses: courses?.length || 0,
-      avgPerformance: reviews?.length
-        ? (reviews.reduce((acc, r) => acc + (r.overall_rating || 0), 0) / reviews.length)
-        : 0,
-      pendingReviews: 12,
-    });
-
-    setInsights(insightsData || []);
-
-    const courseCounts = courses?.reduce((acc: any, course: any) => {
-      const courseId = course.course_id;
-      if (!acc[courseId]) {
-        acc[courseId] = {
-          ...course.learning_courses,
-          enrollments: 0,
-          avgProgress: 0,
-          totalProgress: 0,
-        };
+      // Handle errors from any response
+      const anyError = empRes.error || coursesRes.error || insightsRes.error || reviewsRes.error;
+      if (anyError) {
+        console.error('Supabase error', anyError);
+        setError('Failed to load dashboard data');
+        return;
       }
-      acc[courseId].enrollments++;
-      acc[courseId].totalProgress += course.progress_percentage;
-      acc[courseId].avgProgress = acc[courseId].totalProgress / acc[courseId].enrollments;
-      return acc;
-    }, {});
 
-    const topCoursesArray = Object.values(courseCounts || {})
-      .sort((a: any, b: any) => b.enrollments - a.enrollments)
-      .slice(0, 5);
+      const employees = empRes.data ?? [];
+      const courses = coursesRes.data ?? [];
+      const insightsData = insightsRes.data ?? [];
+      const reviews = reviewsRes.data ?? [];
 
-    setTopCourses(topCoursesArray);
+      const avgPerformance = reviews.length
+        ? reviews.reduce((acc: number, r: any) => acc + (r.overall_rating ?? 0), 0) / reviews.length
+        : 0;
+
+      // Pending = reviews without an overall_rating
+      const pendingReviewsCount = reviews.filter((r: any) => r.overall_rating == null).length;
+
+      setStats({
+        totalEmployees: employees.length,
+        activeCourses: courses.length,
+        avgPerformance: avgPerformance,
+        pendingReviews: pendingReviewsCount,
+      });
+
+      setInsights(insightsData as AIInsight[]);
+
+      const courseCounts = (courses as any[]).reduce((acc: any, course: any) => {
+        const courseId = course.course_id;
+        if (!acc[courseId]) {
+          acc[courseId] = {
+            ...(course.learning_courses || {}),
+            enrollments: 0,
+            avgProgress: 0,
+            totalProgress: 0,
+          };
+        }
+        acc[courseId].enrollments++;
+        acc[courseId].totalProgress += Number(course.progress_percentage ?? 0);
+        acc[courseId].avgProgress = acc[courseId].totalProgress / acc[courseId].enrollments;
+        return acc;
+      }, {} as Record<string, any>);
+
+      const topCoursesArray = Object.values(courseCounts)
+        .sort((a: any, b: any) => (b.enrollments || 0) - (a.enrollments || 0))
+        .slice(0, 5);
+
+      setTopCourses(topCoursesArray);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const getPriorityColor = (priority: string) => {
@@ -111,7 +134,7 @@ export default function Home() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-600 mt-1">Welcome back! Here's your HR overview.</p>
+  <p className="text-slate-600 mt-1">Welcome back! Here&apos;s your HR overview.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -147,110 +170,6 @@ export default function Home() {
           icon={Calendar}
           iconColor="text-orange-600"
         />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-slate-200">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl">AI-Powered Insights</CardTitle>
-                <CardDescription>Real-time analysis and recommendations</CardDescription>
-              </div>
-              <Brain className="w-6 h-6 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {insights.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">
-                  No new insights available. Add sample data to see AI recommendations.
-                </p>
-              ) : (
-                insights.map((insight) => {
-                  const IconComponent = getInsightIcon(insight.insight_type);
-                  return (
-                    <div
-                      key={insight.id}
-                      className="flex items-start gap-3 p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all duration-200"
-                    >
-                      <div className="p-2 rounded-lg bg-blue-100">
-                        <IconComponent className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="text-sm font-semibold text-slate-900 truncate">
-                            {insight.title}
-                          </h4>
-                          <Badge
-                            variant="outline"
-                            className={getPriorityColor(insight.priority)}
-                          >
-                            {insight.priority}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-slate-600 line-clamp-2">
-                          {insight.description}
-                        </p>
-                        {insight.confidence_score && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Confidence: {(insight.confidence_score * 100).toFixed(0)}%
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl">Popular Courses</CardTitle>
-                <CardDescription>Most enrolled learning programs</CardDescription>
-              </div>
-              <GraduationCap className="w-6 h-6 text-green-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {topCourses.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">
-                  No course enrollments yet. Start adding courses and enrollments.
-                </p>
-              ) : (
-                topCourses.map((course: any) => (
-                  <div key={course.id} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-semibold text-slate-900 truncate">
-                          {course.title}
-                        </h4>
-                        <p className="text-xs text-slate-600">
-                          {course.enrollments} enrolled • {course.duration_hours}h
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="ml-2">
-                        {course.level}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Avg Progress</span>
-                        <span>{Math.round(course.avgProgress)}%</span>
-                      </div>
-                      <Progress value={course.avgProgress} className="h-2" />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <Card className="border-slate-200">
