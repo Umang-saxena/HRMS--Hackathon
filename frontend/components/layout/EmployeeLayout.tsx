@@ -11,7 +11,10 @@ import {
   User,
   FileText,
   Award,
-  Clock
+  Clock,
+  Sun,
+  DollarSign,
+  Umbrella
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';
@@ -19,12 +22,12 @@ import { useAuth } from '@/components/AuthProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/employee', icon: LayoutDashboard },
-  { name: 'Bonuses', href: '/employee/bonuses', icon: GraduationCap },
   { name: 'Performance', href: '/employee/performance', icon: TrendingUp },
   { name: 'Attendance', href: '/employee/attendance', icon: Calendar },
   { name: 'Profile', href: '/employee/profile', icon: User },
-  { name: 'Payroll', href: '/employee/payroll', icon: FileText },
-  { name: 'Task', href: '/employee/task', icon: Award },
+  { name: 'Payroll', href: '/employee/payroll', icon: DollarSign },
+  { name: 'Task', href: '/employee/task', icon: FileText },
+  { name: 'Leaves', href: '/employee/leaves', icon: Umbrella },
   
 ];
 

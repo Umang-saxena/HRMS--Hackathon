@@ -1,47 +1,50 @@
 # backend/app/main.py
+
+from dotenv import load_dotenv
+load_dotenv()
+import os
+import traceback
+
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from app.db import Base, engine
-from app.models import user
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
+
+# load environment variables early
+
+
+# ensure model modules are imported early so SQLAlchemy registers mappers
+# adjust these if your models live elsewhere (e.g. app.models.user contains Employee)
+import app.models.user      # registers User / Employee if defined here
+   # registers Employee if you have a separate module
 from app.models import performance
-
-import os
-
-load_dotenv()
-
-from app.routes import auth, hr, public, jobs, candidate  # import the auth, hr, public, jobs, and candidate routers
+# db and middleware
+from app.db import Base, engine
 from app.middleware import RateLimitMiddleware, CacheMiddleware
 
-# core routers
-from app.routes import auth, hr, public
-# optional routers
-from app.routes import jobs  # may raise ImportError if jobs isn't present; remove if not needed
+# routers (core + feature)
+from app.routes import auth, hr, public, jobs, candidate
+from app.payroll import routes as payroll_routes
+from app.leave.routes import router as leave_router
+from app.performance import routes as performance_routes
+app = FastAPI(title="Your HRMS")
 
-# feature routers
-from app.payroll.routes import router as payroll_router
-from app.performance.routes import router as perf_router
-
-
-app = FastAPI()
-
-# Add rate limiting middleware (100 requests per minute per IP)
-app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
-
-# Add caching middleware (5 minutes TTL)
-app.add_middleware(CacheMiddleware, cache_ttl=300)
-
-# CORS settings
-# backend/main.py (example)
-from fastapi.middleware.cors import CORSMiddleware
+# CORS must be registered before custom middlewares that may short-circuit requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # your frontend origin(s)
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
-    allow_methods=["GET","POST","PUT","DELETE","OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# custom middlewares
+app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+app.add_middleware(CacheMiddleware, cache_ttl=300)
 
 # Root & health endpoints
 @app.get("/")
@@ -50,29 +53,23 @@ def read_root():
 
 @app.get("/test-supabase")
 def test_supabase():
-    # response = supabase.table("users").select("*").limit(5).execute()
-    # if response.error:
-    #     return {"error": response.error.message}
-    # return {"data": response.data}
     return {"message": "Supabase client is set up correctly"}
 
-# Include routers
+# Include routers (order doesn't matter now that models are imported)
 app.include_router(auth.router)
 app.include_router(hr.router)
 app.include_router(public.router)
-
 app.include_router(jobs.router)
 app.include_router(candidate.router)
+app.include_router(payroll_routes.router)
+app.include_router(leave_router)
+app.include_router(performance_routes.router, prefix="/api/performance")
 
-
-# Optional: include jobs router only if it exists
-try:
-    app.include_router(jobs.router)
-except Exception:
-    # If jobs module / router isn't present, skip it.
-    pass
-
-# Include payroll and performance routers
-app.include_router(payroll_router)
-app.include_router(perf_router)
-
+# DEV-only: detailed exception handler (temporary — remove in prod)
+@app.exception_handler(Exception)
+async def dev_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    print("=== DEV EXCEPTION TRACEBACK START ===")
+    print(tb)
+    print("=== DEV EXCEPTION TRACEBACK END ===")
+    return JSONResponse(status_code=500, content={"error": str(exc), "traceback": tb})
