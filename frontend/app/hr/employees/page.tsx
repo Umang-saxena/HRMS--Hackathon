@@ -1,569 +1,462 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Mail, Phone, Building2, Calendar, User, DollarSign, MapPin } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { useEffect, useState, useMemo } from 'react';
+import { Edit, Trash, Search, User, Mail, Building2, UploadCloud, DownloadCloud, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Employee, Department } from '@/lib/supabase';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 
-export default function EmployeesPage() {
+type Employee = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  department_id?: string | null;
+  company_id?: string | null;
+  role?: string | null;
+  date_of_joining?: string | null;
+  salary?: number | string | null;
+  employment_status?: string | null;
+  created_at?: string | null;
+};
+
+export default function AdminEmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    position: '',
-    department_id: '',
-    salary: '',
-    hire_date: new Date().toISOString().split('T')[0],
-    status: 'active',
-  });
+  const [filtered, setFiltered] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [editData, setEditData] = useState<Partial<Employee>>({});
+  const [saving, setSaving] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createData, setCreateData] = useState<Partial<Employee>>({});
+  const [importing, setImporting] = useState(false);
+  const { toast } = useToast();
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const perPage = 10;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paginated = useMemo(() => {
+    const start = (page - 1) * perPage;
+    return filtered.slice(start, start + perPage);
+  }, [filtered, page]);
 
   useEffect(() => {
-    loadData();
-    loadDepartments();
+    loadEmployees();
   }, []);
 
-  async function loadDepartments() {
-    const session = (await supabase.auth.getSession()).data.session;
-    const token = session?.access_token;
+  useEffect(() => {
+    applyFilter();
+    setPage(1);
+  }, [employees, search]);
 
+  async function loadEmployees() {
+    setLoading(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) throw new Error('API request failed');
-      const companiesData = await res.json();
-
-      // Assuming the HR user belongs to the first company or we need to get company_id from user metadata
-      const companyId = session?.user?.user_metadata?.company_id || companiesData[0]?.id;
-
-      if (companyId) {
-        const deptRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/departments?company_id=${companyId}`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (deptRes.ok) {
-          const departmentsData = await deptRes.json();
-          setDepartments(departmentsData || []);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching departments:', err);
-      // fallback to Supabase DB query
-      const { data: fallbackData } = await supabase
-        .from('departments')
-        .select('*')
-        .order('name');
-      setDepartments(fallbackData || []);
+      const { data, error } = await supabase.from('employees').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setEmployees(data || []);
+      setFiltered(data || []);
+    } catch (err: any) {
+      console.error('Error loading employees:', err);
+      toast({ title: 'Failed to load employees', variant: 'destructive' });
+      setEmployees([]);
+      setFiltered([]);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function loadData() {
-    const session = (await supabase.auth.getSession()).data.session;
-    const token = session?.access_token;
-
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/employees`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) throw new Error('API request failed');
-      const employeesData = await res.json();
-      setEmployees(employeesData || []);
-    } catch (err) {
-      console.error('Error fetching employees:', err);
-      // fallback to Supabase DB query
-      const { data: fallbackData } = await supabase
-        .from('employees')
-        .select('*, departments(name)')
-        .order('created_at', { ascending: false });
-      setEmployees(fallbackData || []);
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    const session = (await supabase.auth.getSession()).data.session;
-    const token = session?.access_token;
-    let companyId = session?.user?.user_metadata?.company_id;
-
-    // If company_id not in user metadata, get it from companies API
-    if (!companyId) {
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (res.ok) {
-          const companiesData = await res.json();
-          companyId = companiesData[0]?.id;
-        }
-      } catch (err) {
-        console.error('Error fetching company ID:', err);
-        return;
-      }
-    }
-
-    if (!companyId) {
-      console.error('Company ID not found');
+  function applyFilter() {
+    if (!search) {
+      setFiltered(employees);
       return;
     }
+    const q = search.toLowerCase();
+    setFiltered(
+      employees.filter(
+        (e) =>
+          `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+          (e.email || '').toLowerCase().includes(q) ||
+          (e.role || '').toLowerCase().includes(q)
+      )
+    );
+  }
 
+  function openEdit(emp: Employee) {
+    setEditing(emp);
+    setEditData({
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      email: emp.email,
+      phone: emp.phone ?? '',
+      role: emp.role ?? '',
+      date_of_joining: emp.date_of_joining ?? '',
+      salary: emp.salary ?? '',
+      employment_status: emp.employment_status ?? '',
+    });
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setEditData({});
+  }
+
+  async function handleSave() {
+    if (!editing) return;
+    setSaving(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/hr/companies/${companyId}/employees`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          company_id: companyId,
-          salary: formData.salary ? parseFloat(formData.salary) : null,
-          date_of_joining: formData.hire_date,
-        }),
-      });
+      const updates: Partial<Employee> = {
+        first_name: editData.first_name,
+        last_name: editData.last_name,
+        phone: editData.phone,
+        role: editData.role,
+        date_of_joining: editData.date_of_joining,
+        salary: editData.salary,
+        employment_status: editData.employment_status,
+      };
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Failed to add employee');
-      }
+      const { error } = await supabase.from('employees').update(updates).eq('id', editing.id);
+      if (error) throw error;
 
-      setIsDialogOpen(false);
-      setFormData({
-        first_name: '',
-        last_name: '',
-        email: '',
-        phone: '',
-        position: '',
-        department_id: '',
-        salary: '',
-        hire_date: new Date().toISOString().split('T')[0],
-        status: 'active',
-      });
-      loadData();
+      toast({ title: 'Employee updated' });
+      closeEdit();
+      await loadEmployees();
     } catch (err) {
-      console.error('Error adding employee:', err);
-      // You might want to show an error message to the user here
+      console.error('Update error:', err);
+      toast({ title: 'Failed to update employee', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   }
 
-  const filteredEmployees = employees.filter((emp) =>
-    `${emp.first_name} ${emp.last_name} ${emp.email} ${emp.position}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
-  );
+  async function handleDelete(emp: Employee) {
+    const confirmDel = window.confirm(`Delete employee "${emp.first_name} ${emp.last_name}"? This cannot be undone.`);
+    if (!confirmDel) return;
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'on_leave':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'terminated':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-slate-100 text-slate-800';
+    try {
+      const { error } = await supabase.from('employees').delete().eq('id', emp.id);
+      if (error) throw error;
+      toast({ title: 'Employee deleted' });
+      await loadEmployees();
+    } catch (err) {
+      console.error('Delete error:', err);
+      toast({ title: 'Failed to delete employee', variant: 'destructive' });
     }
-  };
+  }
+
+  // Create new employee
+  async function handleCreate() {
+    // basic validation
+    if (!createData.first_name || !createData.last_name || !createData.email) {
+      toast({ title: 'Required fields missing', description: 'First name, last name and email are required', variant: 'destructive' });
+      return;
+    }
+    try {
+      const insertRow = {
+        first_name: createData.first_name,
+        last_name: createData.last_name,
+        email: createData.email,
+        phone: createData.phone || null,
+        role: createData.role || null,
+        date_of_joining: createData.date_of_joining || null,
+        salary: createData.salary || null,
+        employment_status: createData.employment_status || 'active',
+      };
+      const { error } = await supabase.from('employees').insert([insertRow]);
+      if (error) throw error;
+      toast({ title: 'Employee created' });
+      setCreateData({});
+      setShowCreate(false);
+      await loadEmployees();
+    } catch (err) {
+      console.error('Create error:', err);
+      toast({ title: 'Failed to create employee', variant: 'destructive' });
+    }
+  }
+
+  // CSV parsing (very simple parser; assumes header row and comma-separated)
+  function parseCSV(text: string) {
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length < 1) return { headers: [], rows: [] };
+    const headers = lines[0].split(',').map((h) => h.trim());
+    const rows = lines.slice(1).map((line) => {
+      // split - naive, does not support quoted commas
+      const values = line.split(',').map((v) => v.trim());
+      const obj: any = {};
+      headers.forEach((h, i) => {
+        obj[h] = values[i] ?? '';
+      });
+      return obj;
+    });
+    return { headers, rows };
+  }
+
+  // Bulk import CSV: expects columns matching the employees table (first_name,last_name,email,phone,role,date_of_joining,salary,employment_status)
+  async function handleCSVFile(file: File | null) {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const { headers, rows } = parseCSV(text);
+      if (rows.length === 0) {
+        toast({ title: 'CSV empty', variant: 'destructive' });
+        setImporting(false);
+        return;
+      }
+
+      // Map CSV rows to DB columns - best-effort mapping
+      const mapped = rows.map((r) => ({
+        first_name: r['first_name'] || r['firstname'] || r['FirstName'] || '',
+        last_name: r['last_name'] || r['lastname'] || r['LastName'] || '',
+        email: r['email'] || r['Email'] || '',
+        phone: r['phone'] || r['Phone'] || null,
+        role: r['role'] || r['Role'] || null,
+        date_of_joining: r['date_of_joining'] || r['dateOfJoining'] || null,
+        salary: r['salary'] ? Number(r['salary']) : null,
+        employment_status: r['employment_status'] || r['status'] || 'active',
+      }));
+
+      // optionally validate rows
+      const invalid = mapped.filter((m) => !m.email || !m.first_name || !m.last_name);
+      if (invalid.length) {
+        toast({ title: 'Some rows missing required fields', description: `${invalid.length} rows skipped`, variant: 'destructive' });
+      }
+
+      const toInsert = mapped.filter((m) => m.email && m.first_name && m.last_name);
+
+      if (toInsert.length === 0) {
+        toast({ title: 'No valid rows to import', variant: 'destructive' });
+        setImporting(false);
+        return;
+      }
+
+      // Insert in batches (supabase has limits; do 100 at a time)
+      const batchSize = 100;
+      for (let i = 0; i < toInsert.length; i += batchSize) {
+        const batch = toInsert.slice(i, i + batchSize);
+        const { error } = await supabase.from('employees').insert(batch);
+        if (error) {
+          console.error('Bulk insert error for batch', i / batchSize, error);
+          toast({ title: 'Import failed', description: error.message, variant: 'destructive' });
+          setImporting(false);
+          return;
+        }
+      }
+
+      toast({ title: `Imported ${toInsert.length} employees` });
+      await loadEmployees();
+    } catch (err) {
+      console.error('CSV import error:', err);
+      toast({ title: 'Failed to import CSV', variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // Export visible employees to CSV (filtered)
+  function exportToCSV(rows: Employee[]) {
+    if (!rows.length) {
+      toast({ title: 'No rows to export', variant: 'destructive' });
+      return;
+    }
+    const headers = ['id', 'first_name', 'last_name', 'email', 'phone', 'role', 'date_of_joining', 'salary', 'employment_status', 'created_at'];
+    const csv = [
+      headers.join(','),
+      ...rows.map((r) =>
+        headers
+          .map((h) => {
+            const val = (r as any)[h];
+            if (val == null) return '';
+            // escape quotes
+            const s = String(val).replace(/"/g, '""');
+            // if contains comma or newline, wrap in quotes
+            return s.includes(',') || s.includes('\n') ? `"${s}"` : s;
+          })
+          .join(',')
+      ),
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `employees_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
-          <p className="text-slate-600 mt-1">Manage your team members</p>
+          <p className="text-slate-600 mt-1">View, create, import, edit or remove employee records</p>
         </div>
-        <Button
-          onClick={() => setIsDialogOpen(true)}
-          className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Employee
-        </Button>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Add New Employee</DialogTitle>
-              <DialogDescription>Enter employee details to add them to your organization.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name</Label>
-                  <Input
-                    id="first_name"
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">Last Name</Label>
-                  <Input
-                    id="last_name"
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
-                  <Input
-                    id="position"
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Select
-                    value={formData.department_id}
-                    onValueChange={(value) => setFormData({ ...formData, department_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="salary">Salary</Label>
-                  <Input
-                    id="salary"
-                    type="number"
-                    value={formData.salary}
-                    onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hire_date">Hire Date</Label>
-                  <Input
-                    id="hire_date"
-                    type="date"
-                    value={formData.hire_date}
-                    onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-gradient-to-r from-blue-600 to-cyan-600">
-                  Add Employee
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <UploadCloud className="w-5 h-5 text-slate-600" />
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => handleCSVFile(e.target.files?.[0] ?? null)}
+            />
+            <span className="text-sm text-slate-700">Import CSV</span>
+          </label>
+
+          <Button variant="ghost" onClick={() => exportToCSV(filtered)}>
+            <DownloadCloud className="w-4 h-4 mr-2" /> Export CSV
+          </Button>
+
+          <Button onClick={() => setShowCreate((s) => !s)}>
+            <Plus className="w-4 h-4 mr-2" /> New Employee
+          </Button>
+        </div>
       </div>
 
-      <Card className="border-slate-200">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
-                type="search"
-                placeholder="Search employees..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+      {/* Create Panel */}
+      {showCreate && (
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle>Create Employee</CardTitle>
+            <CardDescription>Fill required fields and click Create</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Input placeholder="First name" value={createData.first_name || ''} onChange={(e) => setCreateData((p) => ({ ...p, first_name: e.target.value }))} />
+              <Input placeholder="Last name" value={createData.last_name || ''} onChange={(e) => setCreateData((p) => ({ ...p, last_name: e.target.value }))} />
+              <Input placeholder="Email" value={createData.email || ''} onChange={(e) => setCreateData((p) => ({ ...p, email: e.target.value }))} />
+              <Input placeholder="Phone" value={createData.phone || ''} onChange={(e) => setCreateData((p) => ({ ...p, phone: e.target.value }))} />
+              <Input placeholder="Role" value={createData.role || ''} onChange={(e) => setCreateData((p) => ({ ...p, role: e.target.value }))} />
+              <Input type="date" placeholder="Date of joining" value={createData.date_of_joining || ''} onChange={(e) => setCreateData((p) => ({ ...p, date_of_joining: e.target.value }))} />
+              <Input placeholder="Salary" value={String(createData.salary ?? '')} onChange={(e) => setCreateData((p) => ({ ...p, salary: e.target.value }))} />
+              <Input placeholder="Employment status" value={createData.employment_status || ''} onChange={(e) => setCreateData((p) => ({ ...p, employment_status: e.target.value }))} />
             </div>
-            <Button variant="outline" size="icon">
-              <Filter className="w-4 h-4" />
-            </Button>
-          </div>
 
-          <div className="space-y-3">
-            {filteredEmployees.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-slate-500">No employees found. Add your first employee to get started.</p>
-              </div>
-            ) : (
-              filteredEmployees.map((employee: any) => (
-                <div
-                  key={employee.id}
-                  className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/30 transition-all duration-200"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={employee.profile_image_url || ''} />
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white">
-                        {employee.first_name[0]}
-                        {employee.last_name[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-slate-900">
-                          {employee.first_name} {employee.last_name}
-                        </h3>
-                        <Badge className={getStatusColor(employee.status)}>
-                          {employee.status}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-2">{employee.position}</p>
-                      <div className="flex items-center gap-4 text-xs text-slate-500">
-                        {employee.email && (
-                          <div className="flex items-center gap-1">
-                            <Mail className="w-3 h-3" />
-                            {employee.email}
-                          </div>
-                        )}
-                        {employee.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" />
-                            {employee.phone}
-                          </div>
-                        )}
-                        {employee.departments && (
-                          <div className="flex items-center gap-1">
-                            <Building2 className="w-3 h-3" />
-                            {employee.departments.name}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          Joined {new Date(employee.hire_date).toLocaleDateString()}
-                        </div>
+            <div className="flex gap-2 mt-4">
+              <Button onClick={handleCreate} disabled={importing}>Create</Button>
+              <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Search & Controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Input placeholder="Search by name, email, role..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md" />
+        </div>
+
+        <div className="text-sm text-slate-600">
+          Showing {filtered.length} results • Page {page}/{totalPages}
+        </div>
+      </div>
+
+      {/* Employees list */}
+      <Card className="border-slate-200">
+        <CardHeader>
+          <CardTitle>All Employees</CardTitle>
+          <CardDescription>Manage records</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading employees...</p>
+          ) : paginated.length === 0 ? (
+            <p className="text-sm text-slate-500">No employees found.</p>
+          ) : (
+            <div className="space-y-2">
+              {paginated.map((e) => (
+                <div key={e.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-full bg-slate-100 w-10 h-10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-slate-500" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-900">{e.first_name} {e.last_name}</div>
+                      <div className="text-xs text-slate-600 flex items-center gap-3">
+                        <Mail className="w-3 h-3" /> {e.email}
+                        <Building2 className="w-3 h-3 ml-2" /> <span className="capitalize">{e.role || '—'}</span>
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedEmployee(employee);
-                      setIsProfileModalOpen(true);
-                    }}
-                  >
-                    View Profile
-                  </Button>
+
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize">{e.employment_status || 'active'}</Badge>
+                    <Button variant="ghost" onClick={() => openEdit(e)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                    <Button variant="ghost" onClick={() => handleDelete(e)} title="Delete" className="text-red-600"><Trash className="w-4 h-4" /></Button>
+                  </div>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
+          )}
+
+          {/* Pagination controls */}
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <Button variant="ghost" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Prev</Button>
+            <div className="px-3 py-1 border rounded">{page}</div>
+            <Button variant="ghost" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Employee Profile Modal */}
-      <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Employee Profile</DialogTitle>
-            <DialogDescription>
-              Detailed information about {selectedEmployee?.first_name} {selectedEmployee?.last_name}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedEmployee && (
-            <div className="space-y-6">
-              {/* Profile Header */}
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={selectedEmployee.profile_image_url || ''} />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-2xl">
-                    {selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h2 className="text-2xl font-bold text-slate-900">
-                      {selectedEmployee.first_name} {selectedEmployee.last_name}
-                    </h2>
-                    <Badge className={getStatusColor(selectedEmployee.status)}>
-                      {selectedEmployee.status}
-                    </Badge>
-                  </div>
-                  <p className="text-lg text-slate-600">{selectedEmployee.position}</p>
-                  <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-                    <div className="flex items-center gap-1">
-                      <Mail className="w-4 h-4" />
-                      {selectedEmployee.email}
-                    </div>
-                    {selectedEmployee.phone && (
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-4 h-4" />
-                        {selectedEmployee.phone}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      Joined {new Date(selectedEmployee.hire_date).toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
+      {/* Edit panel */}
+      {editing && (
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle>Edit Employee</CardTitle>
+            <CardDescription>Make changes and Save</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-medium text-slate-600">First name</label>
+                <Input value={editData.first_name || ''} onChange={(e) => setEditData((p) => ({ ...p, first_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Last name</label>
+                <Input value={editData.last_name || ''} onChange={(e) => setEditData((p) => ({ ...p, last_name: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Phone</label>
+                <Input value={editData.phone || ''} onChange={(e) => setEditData((p) => ({ ...p, phone: e.target.value }))} />
               </div>
 
-              {/* Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Employment Details */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <User className="w-5 h-5" />
-                      Employment Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Employee ID</label>
-                      <p className="text-sm text-slate-900">{selectedEmployee.id}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Position</label>
-                      <p className="text-sm text-slate-900">{selectedEmployee.position}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Department</label>
-                      <p className="text-sm text-slate-900">
-                        {(selectedEmployee as any).departments?.name || 'Not assigned'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Status</label>
-                      <Badge className={getStatusColor(selectedEmployee.status)}>
-                        {selectedEmployee.status}
-                      </Badge>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Hire Date</label>
-                      <p className="text-sm text-slate-900">
-                        {new Date(selectedEmployee.hire_date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {selectedEmployee.salary && (
-                      <div>
-                        <label className="text-sm font-medium text-slate-600">Salary</label>
-                        <p className="text-sm text-slate-900">
-                          ${selectedEmployee.salary.toLocaleString()}/year
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Role</label>
+                <Input value={editData.role || ''} onChange={(e) => setEditData((p) => ({ ...p, role: e.target.value }))} />
+              </div>
 
-                {/* Contact Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Phone className="w-5 h-5" />
-                      Contact Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Email</label>
-                      <p className="text-sm text-slate-900">{selectedEmployee.email}</p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-600">Phone</label>
-                      <p className="text-sm text-slate-900">{selectedEmployee.phone || 'Not provided'}</p>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Date of Joining</label>
+                <Input type="date" value={editData.date_of_joining || ''} onChange={(e) => setEditData((p) => ({ ...p, date_of_joining: e.target.value }))} />
+              </div>
 
-                {/* Additional Information */}
-                <Card className="md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5" />
-                      Additional Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-slate-600">Created At</label>
-                        <p className="text-sm text-slate-900">
-                          {new Date(selectedEmployee.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-slate-600">Last Updated</label>
-                        <p className="text-sm text-slate-900">
-                          {new Date(selectedEmployee.updated_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Employment Status</label>
+                <Input value={editData.employment_status || ''} onChange={(e) => setEditData((p) => ({ ...p, employment_status: e.target.value }))} />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-600">Salary</label>
+                <Input value={String(editData.salary || '')} onChange={(e) => setEditData((p) => ({ ...p, salary: e.target.value }))} />
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+            <div className="flex gap-2 mt-4">
+              <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button>
+              <Button variant="ghost" onClick={closeEdit}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

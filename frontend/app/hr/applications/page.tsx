@@ -22,11 +22,13 @@ interface ApplicationWithDetails extends JobApplicationResponse {
     salary_range?: string;
   };
   candidates?: {
-    name: string;
+    first_name?: string;
+    last_name?: string;
     email: string;
-    phone?: string;
+    phone_number?: string;
   };
 }
+
 
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
@@ -49,8 +51,9 @@ export default function ApplicationsPage() {
         .select(`
           *,
           job_postings!inner(title, location, employment_type, salary_range, created_by),
-          candidates!inner(name, email, phone)
+          candidates!inner(first_name, last_name, email, phone_number)
         `);
+
 
       // Get current HR user to filter by their jobs
       const { data: { user } } = await supabase.auth.getUser();
@@ -85,15 +88,12 @@ export default function ApplicationsPage() {
   async function updateApplicationStatus(applicationId: string, newStatus: string) {
     try {
       setUpdatingStatus(applicationId);
-      const response = await fetch(`/api/hr/applications/${applicationId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ screening_status: newStatus }),
-      });
+      const { error } = await supabase
+        .from('applications')
+        .update({ screening_status: newStatus })
+        .eq('id', applicationId);
 
-      if (!response.ok) throw new Error('Failed to update status');
+      if (error) throw error;
 
       toast({
         title: 'Success',
@@ -138,7 +138,7 @@ export default function ApplicationsPage() {
   };
 
   const uniqueJobs = Array.from(
-    new Set(applications.map(app => app.job_postings?.title).filter(Boolean))
+    new Set(applications.map(app => app.job_postings?.title || '').filter(Boolean))
   );
 
   return (
@@ -221,29 +221,31 @@ export default function ApplicationsPage() {
                       <TableCell>
                         <div>
                           <div className="font-medium text-slate-900">
-                            {application.candidates?.name}
+                            {application.candidates?.first_name} {application.candidates?.last_name}
                           </div>
                           <div className="text-sm text-slate-500 flex items-center gap-1">
                             <Mail className="w-3 h-3" />
                             {application.candidates?.email}
                           </div>
-                          {application.candidates?.phone && (
+                          {application.candidates?.phone_number && (
                             <div className="text-sm text-slate-500 flex items-center gap-1">
                               <Phone className="w-3 h-3" />
-                              {application.candidates.phone}
+                              {application.candidates.phone_number}
                             </div>
                           )}
                         </div>
                       </TableCell>
+
                       <TableCell>
                         <div>
                           <div className="font-medium text-slate-900">
-                            {application.job_postings?.title}
+                            {application.job_postings?.title ?? '-'}
                           </div>
                           <div className="text-sm text-slate-500 flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
                             {application.job_postings?.location}
                           </div>
+
                           <div className="text-sm text-slate-500 flex items-center gap-1">
                             <Briefcase className="w-3 h-3" />
                             {application.job_postings?.employment_type}
@@ -311,12 +313,13 @@ export default function ApplicationsPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
                                     <Label className="text-sm font-medium">Candidate</Label>
-                                    <p className="text-sm text-slate-600">{selectedApplication.candidates?.name}</p>
+                                    <p className="text-sm text-slate-600">{selectedApplication.candidates?.first_name} {selectedApplication.candidates?.last_name}</p>
                                     <p className="text-sm text-slate-600">{selectedApplication.candidates?.email}</p>
-                                    {selectedApplication.candidates?.phone && (
-                                      <p className="text-sm text-slate-600">{selectedApplication.candidates.phone}</p>
+                                    {selectedApplication.candidates?.phone_number && (
+                                      <p className="text-sm text-slate-600">{selectedApplication.candidates.phone_number}</p>
                                     )}
                                   </div>
+
                                   <div>
                                     <Label className="text-sm font-medium">Job Position</Label>
                                     <p className="text-sm text-slate-600">{selectedApplication.job_postings?.title}</p>
@@ -356,12 +359,13 @@ export default function ApplicationsPage() {
                                       variant="outline"
                                       size="sm"
                                       className="mt-1"
-                                      onClick={() => window.open(selectedApplication.resume_url, '_blank')}
+                                      onClick={() => selectedApplication.resume_url && window.open(selectedApplication.resume_url, '_blank')}
                                     >
                                       <FileText className="w-4 h-4 mr-1" />
                                       View Resume
                                     </Button>
                                   </div>
+
                                 )}
 
                                 {selectedApplication.ai_score && (
