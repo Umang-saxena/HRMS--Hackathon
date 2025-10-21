@@ -64,14 +64,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
         console.log('Auth event:', event, 'path:', pathname);
 
-        // ✅ Redirect logic
         if (session && pathname === '/auth') {
           const role = session.user.user_metadata?.role || 'employee';
           const rolePage = getRolePage(role);
           router.push(rolePage);
-        } 
-        // ✅ Only redirect to /auth if not on home page or /auth itself
-        else if (!session && pathname !== '/auth' && pathname !== '/') {
+        } else if (!session && pathname !== '/auth' && pathname !== '/') {
           router.push('/auth');
         }
       }
@@ -80,29 +77,85 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => subscription.unsubscribe();
   }, [router, pathname]);
 
-  // ✅ Auto logout when closing tab or refreshing
+  // TAB COUNT & unload handling:
   useEffect(() => {
-    const clearSessionOnClose = () => {
+    const TAB_COUNT_KEY = 'hrms_open_tabs';
+    // helper to read/write count
+    const readCount = () => parseInt(localStorage.getItem(TAB_COUNT_KEY) || '0', 10);
+    const writeCount = (n: number) => localStorage.setItem(TAB_COUNT_KEY, String(n));
+
+    // increment on mount
+    try {
+      const current = readCount();
+      writeCount(current + 1);
+    } catch (err) {
+      console.error('Error incrementing tab count', err);
+    }
+
+    // stable handler reference so we can remove it
+    const handleBeforeUnload = (ev: BeforeUnloadEvent) => {
       try {
-        supabase.auth.signOut(); // log out Supabase
-        localStorage.removeItem('supabase.auth.token');
-        localStorage.removeItem('sb:auth-token');
-        sessionStorage.clear();
+        // decrement count
+        const current = readCount();
+        const next = Math.max(0, current - 1);
+        writeCount(next);
+
+        // if this was the last open tab, clear session and attempt sign out
+        if (next === 0) {
+          // best-effort sign out; may not complete in every browser
+          try {
+            // synchronous cleanup
+            localStorage.removeItem('supabase.auth.token');
+            localStorage.removeItem('sb:auth-token');
+            sessionStorage.clear();
+            // attempt async sign out (may be canceled by browser)
+            void supabase.auth.signOut();
+          } catch (err) {
+            console.error('Error during unload signOut:', err);
+          }
+        }
       } catch (err) {
-        console.error('Error clearing session:', err);
+        console.error('Error handling beforeunload', err);
       }
+
+      // No need to call preventDefault here unless you want a confirm dialog.
     };
 
-    window.addEventListener('beforeunload', clearSessionOnClose);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        clearSessionOnClose();
-      }
-    });
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // Also listen for 'storage' events so other tabs can react if needed (optional)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TAB_COUNT_KEY) {
+        // optional: we could update local state if we cared about number of open tabs
+        // console.log('tab count changed:', e.newValue);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // cleanup on unmount (react unmount, not tab close)
     return () => {
-      window.removeEventListener('beforeunload', clearSessionOnClose);
-      document.removeEventListener('visibilitychange', clearSessionOnClose);
+      try {
+        // decrement because this instance is being unmounted
+        const current = readCount();
+        const next = Math.max(0, current - 1);
+        writeCount(next);
+
+        if (next === 0) {
+          try {
+            localStorage.removeItem('supabase.auth.token');
+            localStorage.removeItem('sb:auth-token');
+            sessionStorage.clear();
+            void supabase.auth.signOut();
+          } catch (err) {
+            console.error('Error during cleanup signOut:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Error in unmount cleanup', err);
+      }
+
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
@@ -118,7 +171,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   const renderLayout = () => {
-    const role = user.user_metadata?.role || 'employee';
+    const role = user?.user_metadata?.role || 'employee';
     console.log('Role:', role);
 
     switch (role) {
