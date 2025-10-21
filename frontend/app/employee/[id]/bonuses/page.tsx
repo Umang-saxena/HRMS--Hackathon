@@ -2,10 +2,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 
-export default function BonusesPage({ params }: { params: { id: string } }) {
-  const employeeId = params.id;
+export default function BonusesPage() {
+  const params = useParams();
+  const employeeId = params.id as string;
   const [bonuses, setBonuses] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

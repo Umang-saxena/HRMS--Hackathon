@@ -1,15 +1,13 @@
-"use client";
-
 import React from "react";
 import CandidateLayout from "@/components/layout/CandidateLayout";
 import { Button } from "@/components/ui/button";
 
 interface JobDetailsProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-const JobDetailsPage: React.FC<JobDetailsProps> = ({ params }) => {
-  const { id } = params;
+const JobDetailsPage: React.FC<JobDetailsProps> = async ({ params }) => {
+  const { id } = await params;
 
   // Placeholder job data (replace with API call later)
   const job = {

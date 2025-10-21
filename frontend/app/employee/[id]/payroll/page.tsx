@@ -2,12 +2,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 
 type BreakdownRow = { amount: number; type?: string; is_taxable?: boolean };
 
-export default function PayrollPage({ params }: { params: { id: string } }) {
-  const employeeId = params?.id;
+export default function PayrollPage() {
+  const params = useParams();
+  const employeeId = params.id as string;
   const [periods, setPeriods] = useState<any[]>([]);
   const [payslips, setPayslips] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<number | "">("");
