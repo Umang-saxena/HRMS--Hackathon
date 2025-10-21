@@ -29,7 +29,6 @@ const getRolePage = (role: string) => {
     case 'hr':
       return '/hr/employees';
     case 'employee':
-      
       return '/employee';
     case 'candidate':
       return '/candidate';
@@ -48,7 +47,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const pathname = usePathname();
 
   useEffect(() => {
-    // Get initial session
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
@@ -58,19 +56,22 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     getSession();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setUser(session?.user ?? null);
         setSession(session);
         setLoading(false);
 
-        // Redirect logic
+        console.log('Auth event:', event, 'path:', pathname);
+
+        // ✅ Redirect logic
         if (session && pathname === '/auth') {
           const role = session.user.user_metadata?.role || 'employee';
           const rolePage = getRolePage(role);
           router.push(rolePage);
-        } else if (!session && pathname !== '/auth') {
+        } 
+        // ✅ Only redirect to /auth if not on home page or /auth itself
+        else if (!session && pathname !== '/auth' && pathname !== '/') {
           router.push('/auth');
         }
       }
@@ -78,6 +79,32 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     return () => subscription.unsubscribe();
   }, [router, pathname]);
+
+  // ✅ Auto logout when closing tab or refreshing
+  useEffect(() => {
+    const clearSessionOnClose = () => {
+      try {
+        supabase.auth.signOut(); // log out Supabase
+        localStorage.removeItem('supabase.auth.token');
+        localStorage.removeItem('sb:auth-token');
+        sessionStorage.clear();
+      } catch (err) {
+        console.error('Error clearing session:', err);
+      }
+    };
+
+    window.addEventListener('beforeunload', clearSessionOnClose);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        clearSessionOnClose();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('beforeunload', clearSessionOnClose);
+      document.removeEventListener('visibilitychange', clearSessionOnClose);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -92,7 +119,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const renderLayout = () => {
     const role = user.user_metadata?.role || 'employee';
-    console.log("Role: ", role);
+    console.log('Role:', role);
 
     switch (role) {
       case 'admin':

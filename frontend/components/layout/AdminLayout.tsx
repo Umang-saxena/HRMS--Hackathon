@@ -15,7 +15,10 @@ import {
   Shield,
   Settings,
   FileText,
-  BarChart3
+  BarChart3,
+  Sun,
+  DollarSign,
+  Watch
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';
@@ -28,7 +31,9 @@ const navigation = [
   { name: 'Performance Reviews', href: '/admin/performance', icon: TrendingUp },
   { name: 'Tasks', href: '/admin/tasks', icon: Brain },
   { name: 'Attendance', href: '/admin/attendance', icon: Calendar },
-  { name: 'AI Assistant', href: '/admin/assistant', icon: Bot },
+  { name: 'Payroll', href: '/admin/payroll', icon: DollarSign },
+  { name: 'Leaves', href: '/admin/leaves', icon: Sun },
+  { name: 'Notifications', href: '/admin/notifications', icon: Watch },
 ];
 
 interface AdminLayoutProps {

@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabase';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/simple-progress';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import StatsCard from '@/components/hr/StatsCard';
-import { Progress } from '@/components/ui/simple-progress';
 
 type Employee = {
   id: string;
@@ -25,26 +25,32 @@ type Employee = {
   last_name: string;
   role?: string | null;
   email?: string | null;
+  salary?: number | null; // yearly gross
 };
 
-type PerformanceReview = {
-  employee_id: string;
-  overall_rating: number;
-};
-
-type Attendance = {
+type AttendanceRow = {
   id?: string;
   employee_id?: string | null;
   date: string;
-  status: string;
+  status?: string;
+};
+
+type PerfRow = {
+  id: string;
+  employee_id: string;
+  overall_score: number;
+  updated_at: string;
+  created_at?: string;
 };
 
 export default function AdminDashboard() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+
   const [stats, setStats] = useState({
     totalEmployees: 0,
     totalHRs: 0,
-    totalPayroll: 0,
-    avgPerformance: 0,
+    monthlyPayroll: 0, // sum of monthly salary across employees
   });
 
   const [attendanceStats, setAttendanceStats] = useState({
@@ -53,27 +59,22 @@ export default function AdminDashboard() {
     monthlyAttendancePercent: 0,
   });
 
-  const [topPerformers, setTopPerformers] = useState<
-    { name: string; rating: number; role: string }[]
+  const [topPerformersWeek, setTopPerformersWeek] = useState<
+    { id: string; name: string; role: string; avgScore: number }[]
   >([]);
-  const [recentAttendance, setRecentAttendance] = useState<Attendance[]>([]);
-  const [newTask, setNewTask] = useState({ title: '', description: '', assignedTo: '' });
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const { toast } = useToast();
 
-  // employees.id (from employees table) for the logged-in admin (used as tasks.assigned_by)
-  const [currentAdminEmployeeId, setCurrentAdminEmployeeId] = useState<string | null>(null);
+  const [recentAttendance, setRecentAttendance] = useState<AttendanceRow[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   useEffect(() => {
-    loadAdminDashboard();
+    void loadAdminDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Helper to get ISO date YYYY-MM-DD for "today"
   function todayIso() {
     return new Date().toISOString().slice(0, 10);
   }
 
-  // Get start of current month yyyy-mm-01
   function startOfMonthIso() {
     const d = new Date();
     const y = d.getFullYear();
@@ -81,249 +82,162 @@ export default function AdminDashboard() {
     return `${y}-${m}-01`;
   }
 
-  // load dashboard state (employees, payroll, perf, recent attendance + attendance summaries)
   async function loadAdminDashboard() {
+    setLoading(true);
     try {
+      // Fetch employees, payroll (we'll compute monthly payroll from employees.salary), performance_reviews(not used directly), recent attendance
       const [
         { data: employeesData, error: empErr },
-        { data: payrollData, error: payErr },
-        { data: perfData, error: perfErr },
+        { data: attendanceRecentData, error: attErr },
+        { data: perfRowsData, error: perfErr },
       ] = await Promise.all([
-        supabase.from('employees').select('*'),
-        supabase.from('payroll').select('*'),
-        supabase.from('performance_reviews').select('*'),
+        supabase.from('employees').select('id,first_name,last_name,role,salary'),
+        supabase.from('attendance').select('*').order('date', { ascending: false }).limit(10),
+        supabase.from('performance_scores').select('*').order('updated_at', { ascending: false }).limit(500),
       ]);
 
-      if (empErr || payErr || perfErr) {
-        console.error('Error fetching admin dashboard data:', { empErr, payErr, perfErr });
-      }
+      if (empErr) console.error('employees fetch error', empErr);
+      if (attErr) console.error('recent attendance fetch error', attErr);
+      if (perfErr) console.error('performance_scores fetch error', perfErr);
 
-      const employeesArr = employeesData || [];
-      const payrollArr = payrollData || [];
-      const perfArr = perfData || [];
+      const employeesArr = (employeesData ?? []) as Employee[];
+      const attendanceArr = (attendanceRecentData ?? []) as AttendanceRow[];
+      const perfRows = (perfRowsData ?? []) as PerfRow[];
 
-      // HR count
-      const hrs =
-        employeesArr.filter((e: any) => (e.role || '').toLowerCase() === 'hr').length || 0;
+      // compute HR count
+      const hrs = employeesArr.filter((e) => (e.role ?? '').toLowerCase() === 'hr').length;
 
-      // payroll sum
-      const payrollSum = payrollArr.reduce(
-        (acc: number, p: any) => acc + (Number(p.salary) || 0),
-        0
-      );
+      // compute monthly payroll: sum( (salary || 0) / 12 )
+      const monthlyPayrollSum = employeesArr.reduce((acc, e) => {
+        const yearly = Number(e.salary ?? 0) || 0;
+        return acc + yearly / 12;
+      }, 0);
 
-      // average performance
-      const avgPerf =
-        perfArr.length > 0
-          ? perfArr.reduce((acc: number, p: any) => acc + (Number(p.overall_rating) || 0), 0) /
-            perfArr.length
-          : 0;
-
-      // Top performers (join)
-      const topPerf =
-        perfArr
-          ?.slice()
-          .sort((a: PerformanceReview, b: PerformanceReview) => b.overall_rating - a.overall_rating)
-          .slice(0, 5)
-          .map((p: PerformanceReview) => {
-            const emp = employeesArr.find((e: Employee) => e.id === p.employee_id);
-            return {
-              name: emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown',
-              rating: p.overall_rating,
-              role: emp?.role || 'Employee',
-            };
-          }) || [];
-
-      // Recent attendance (fetch last 10)
-      const { data: attendanceData, error: attErr } = await supabase
-        .from('attendance')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(10);
-
-      if (attErr) {
-        console.error('Error fetching recent attendance:', attErr);
-      }
-      const attendanceArr = attendanceData || [];
-
-      // Attendance summary computations
+      // attendance summary
       const today = todayIso();
       const monthStart = startOfMonthIso();
 
-      const [{ data: todayRows, error: todayErr }, { data: monthRows, error: monthErr }] =
-        await Promise.all([
-          supabase.from('attendance').select('status').eq('date', today),
-          supabase.from('attendance').select('status').gte('date', monthStart).lte('date', today),
-        ]);
+      const [{ data: todayRows, error: todayErr }, { data: monthRows, error: monthErr }] = await Promise.all([
+        supabase.from('attendance').select('employee_id,status,check_in').eq('date', today),
+        supabase.from('attendance').select('employee_id,status,date,check_in').gte('date', monthStart).lte('date', today),
+      ]);
 
-      if (todayErr) console.error('Error fetching today attendance:', todayErr);
-      if (monthErr) console.error('Error fetching month attendance:', monthErr);
+      if (todayErr) console.error('today attendance error', todayErr);
+      if (monthErr) console.error('month attendance error', monthErr);
 
-      const todayArr: any[] = todayRows || [];
-      const presentToday = todayArr.filter((r) => (r.status || '').toLowerCase() === 'present').length;
-      const absentToday = todayArr.filter((r) => (r.status || '').toLowerCase() === 'absent').length;
+      const todayArr: any[] = (todayRows ?? []);
+      const monthArr: any[] = (monthRows ?? []);
 
-      const monthArr: any[] = monthRows || [];
-      const presentMonthCount = monthArr.filter((r) => (r.status || '').toLowerCase() === 'present').length;
+      // treat present if status === 'Present' OR check_in not null
+      const presentToday = todayArr.filter((r) => ((r.status ?? '').toLowerCase() === 'present' || r.check_in != null)).length;
+      const totalEmployees = employeesArr.length;
+      const absentToday = Math.max(0, totalEmployees - presentToday);
+
+      const presentMonthCount = monthArr.filter((r) => ((r.status ?? '').toLowerCase() === 'present' || r.check_in != null)).length;
       const totalMonthCount = monthArr.length;
       const monthlyAttendancePercent = totalMonthCount > 0 ? Math.round((presentMonthCount / totalMonthCount) * 100) : 0;
 
-      // update state
-      setStats({
-        totalEmployees: employeesArr.length,
-        totalHRs: hrs,
-        totalPayroll: payrollSum,
-        avgPerformance: avgPerf,
+      // compute top 3 performers of the WEEK (last 7 days) from performance_scores
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const weekAgoIso = weekAgo.toISOString();
+
+      const recentPerfRows = perfRows.filter((r) => {
+        try {
+          return new Date(r.updated_at) >= new Date(weekAgoIso);
+        } catch {
+          return false;
+        }
       });
 
-      setTopPerformers(topPerf || []);
-      setRecentAttendance(attendanceArr || []);
-      setEmployees(employeesArr || []);
+      // aggregate avg score per employee
+      const perEmp: Record<string, { sum: number; count: number }> = {};
+      for (const r of recentPerfRows) {
+        const id = r.employee_id;
+        if (!id) continue;
+        const v = Number(r.overall_score ?? 0) || 0;
+        if (!perEmp[id]) perEmp[id] = { sum: 0, count: 0 };
+        perEmp[id].sum += v;
+        perEmp[id].count += 1;
+      }
 
+      // build array and join employee names
+      const aggregated = Object.entries(perEmp).map(([empId, val]) => {
+        const emp = employeesArr.find((e) => e.id === empId);
+        return {
+          id: empId,
+          name: emp ? `${emp.first_name} ${emp.last_name}` : empId,
+          role: emp?.role ?? 'Employee',
+          avgScore: val.count > 0 ? val.sum / val.count : 0,
+        };
+      });
+
+      // If not enough entries in last 7 days, fall back to latest overall best (from perfRows)
+      let top3 = aggregated.sort((a, b) => b.avgScore - a.avgScore).slice(0, 3);
+      if (top3.length < 3) {
+        // derive from all-time perfRows: average per employee
+        const perEmpAll: Record<string, { sum: number; count: number }> = {};
+        for (const r of perfRows) {
+          const id = r.employee_id;
+          if (!id) continue;
+          const v = Number(r.overall_score ?? 0) || 0;
+          if (!perEmpAll[id]) perEmpAll[id] = { sum: 0, count: 0 };
+          perEmpAll[id].sum += v;
+          perEmpAll[id].count += 1;
+        }
+        const allAgg = Object.entries(perEmpAll).map(([empId, val]) => {
+          const emp = employeesArr.find((e) => e.id === empId);
+          return {
+            id: empId,
+            name: emp ? `${emp.first_name} ${emp.last_name}` : empId,
+            role: emp?.role ?? 'Employee',
+            avgScore: val.count > 0 ? val.sum / val.count : 0,
+          };
+        });
+        const merged = [...aggregated, ...allAgg];
+        // dedupe (keep higher avgScore if duplicates)
+        const map = new Map<string, { id: string; name: string; role: string; avgScore: number }>();
+        for (const it of merged) {
+          const existing = map.get(it.id);
+          if (!existing || it.avgScore > existing.avgScore) map.set(it.id, it);
+        }
+        top3 = Array.from(map.values()).sort((a, b) => b.avgScore - a.avgScore).slice(0, 3);
+      }
+
+      // update states
+      setEmployees(employeesArr);
+      setStats({
+        totalEmployees: totalEmployees,
+        totalHRs: hrs,
+        monthlyPayroll: monthlyPayrollSum,
+      });
       setAttendanceStats({
         presentToday,
         absentToday,
         monthlyAttendancePercent,
       });
-
-      // optionally: attempt to resolve current admin employee.id by matching email (non-blocking)
-      // this is just a best-effort to avoid calling the server API later; it is safe if not found.
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const authEmail = (sessionData as any)?.session?.user?.email ?? null;
-        if (authEmail) {
-          const { data: empRow } = await supabase
-            .from('employees')
-            .select('id')
-            .eq('email', authEmail)
-            .maybeSingle();
-          if (empRow && (empRow as any).id) {
-            setCurrentAdminEmployeeId((empRow as any).id);
-          }
-        }
-      } catch (err) {
-        // ignore
-      }
+      setRecentAttendance(attendanceArr);
+      setTopPerformersWeek(top3);
     } catch (err) {
-      console.error('Unexpected error loading admin data:', err);
+      console.error('Unexpected error loading admin dashboard:', err);
       toast({
         title: 'Error loading dashboard',
         description: 'Unable to load admin data',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
-  }
-
-  // Ensure an employees row exists for the logged-in auth user. Calls server route which uses service role.
-  async function ensureAdminEmployeeRow(): Promise<string | null> {
-    // return cached if present
-    if (currentAdminEmployeeId) return currentAdminEmployeeId;
-
-    // read session for email & metadata
-    const { data: sessionData } = await supabase.auth.getSession();
-    const authEmail = (sessionData as any)?.session?.user?.email ?? null;
-    const metadata = (sessionData as any)?.session?.user?.user_metadata ?? {};
-    const first_name = metadata?.given_name || metadata?.first_name || metadata?.name?.split?.(' ')?.[0] || undefined;
-    const last_name = metadata?.family_name || metadata?.last_name || undefined;
-
-    if (!authEmail) {
-      toast({ title: 'Not authenticated', description: 'Sign in to assign tasks', variant: 'destructive' });
-      return null;
-    }
-
-    try {
-      const resp = await fetch('/api/admin/create-employee', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, first_name, last_name }),
-      });
-
-      const text = await resp.text();
-      let body: any = {};
-      try {
-        body = text ? JSON.parse(text) : {};
-      } catch (parseErr) {
-        // returned HTML or broken JSON
-        console.error('create-employee returned non-JSON:', text);
-        toast({ title: 'Server error', description: 'Failed to create admin profile', variant: 'destructive' });
-        return null;
-      }
-
-      if (!resp.ok) {
-        console.error('create-employee API error:', body);
-        toast({ title: 'Failed to link admin profile', description: body?.error || 'Server error', variant: 'destructive' });
-        return null;
-      }
-
-      const id = body?.id ?? null;
-      if (!id) {
-        console.error('create-employee returned no id:', body);
-        toast({ title: 'Failed to link admin profile', variant: 'destructive' });
-        return null;
-      }
-
-      setCurrentAdminEmployeeId(id);
-      return id;
-    } catch (err) {
-      console.error('Error calling create-employee API:', err);
-      toast({ title: 'Network error', description: 'Could not reach server', variant: 'destructive' });
-      return null;
-    }
-  }
-
-  // Assign task to an employee (uses employees.id as assigned_by)
-  async function handleAssignTask() {
-    if (!newTask.title || !newTask.assignedTo) {
-      toast({
-        title: 'Missing Fields',
-        description: 'Please provide a title and select an employee.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // ensure admin is linked to employees table and get employees.id
-    const assignedById = await ensureAdminEmployeeRow();
-    if (!assignedById) {
-      // ensureAdminEmployeeRow already shows an error toast
-      return;
-    }
-
-    const payload = {
-      title: newTask.title,
-      description: newTask.description,
-      assigned_to: newTask.assignedTo,
-      status: 'pending',
-      assigned_by: assignedById, // <-- critical: employees.id
-      assigned_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase.from('tasks').insert([payload]).select('*');
-
-    if (error) {
-      console.error('Error inserting task:', error);
-      toast({
-        title: 'Error assigning task',
-        description: error.message || 'DB error',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    toast({ title: '✅ Task assigned successfully!' });
-    setNewTask({ title: '', description: '', assignedTo: '' });
-    loadAdminDashboard();
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 p-4">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Admin Dashboard</h1>
         <p className="text-slate-600 mt-1">Company-wide overview and management</p>
       </div>
 
-      {/* Stats Overview (includes attendance cards) */}
+      {/* Stats Overview (removed small performance card) */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
           <StatsCard title="Total Employees" value={stats.totalEmployees} icon={Users} iconColor="text-blue-600" />
@@ -334,14 +248,15 @@ export default function AdminDashboard() {
         </div>
 
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
-          <StatsCard title="Total Payroll" value={`₹${stats.totalPayroll}`} icon={Wallet} iconColor="text-green-600" />
+          {/* Monthly Payroll card (sum of all monthly salaries) */}
+          <StatsCard
+            title="Monthly Payroll"
+            value={`₹${Number(stats.monthlyPayroll ?? 0).toFixed(2)}`}
+            icon={Wallet}
+            iconColor="text-green-600"
+          />
         </div>
 
-        <div className="col-span-1 md:col-span-1 lg:col-span-1">
-          <StatsCard title="Avg Performance" value={stats.avgPerformance.toFixed(1)} icon={TrendingUp} iconColor="text-purple-600" />
-        </div>
-
-        {/* Present Today */}
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
           <StatsCard
             title="Present Today"
@@ -353,7 +268,6 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* Absent Today */}
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
           <StatsCard
             title="Absent Today"
@@ -364,33 +278,33 @@ export default function AdminDashboard() {
             iconColor="text-red-600"
           />
         </div>
+
+        <div className="col-span-1 md:col-span-1 lg:col-span-1">
+          <StatsCard title="Top Tasks" value="Open Tasks" icon={ClipboardCheck} iconColor="text-orange-600" />
+        </div>
       </div>
 
-      {/* Top Performers & Recent Attendance */}
+      {/* Top performers of the week & Recent Attendance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Performers */}
         <Card className="border-slate-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="text-purple-600" /> Top Performers
+              <TrendingUp className="text-purple-600" /> Top 3 Performers (This Week)
             </CardTitle>
-            <CardDescription>Highest rated employees</CardDescription>
+            <CardDescription>Based on performance scores updated in the last 7 days</CardDescription>
           </CardHeader>
           <CardContent>
-            {topPerformers.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-8">No performance data yet.</p>
+            {topPerformersWeek.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-8">No recent performance data for this week.</p>
             ) : (
               <div className="space-y-3">
-                {topPerformers.map((emp, idx) => (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center border rounded-lg p-3 hover:bg-slate-50"
-                  >
+                {topPerformersWeek.map((p, idx) => (
+                  <div key={p.id} className="flex justify-between items-center border rounded-lg p-3 hover:bg-slate-50">
                     <div>
-                      <p className="font-semibold text-slate-900">{emp.name}</p>
-                      <p className="text-xs text-slate-600">{emp.role}</p>
+                      <p className="font-semibold text-slate-900">{p.name}</p>
+                      <p className="text-xs text-slate-600">{p.role}</p>
                     </div>
-                    <Badge variant="secondary">{emp.rating}/5</Badge>
+                    <Badge variant="secondary">{Number(p.avgScore).toFixed(1)}/5</Badge>
                   </div>
                 ))}
               </div>
@@ -398,7 +312,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Attendance (recent + month percent) */}
         <Card className="border-slate-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -447,21 +360,9 @@ export default function AdminDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              placeholder="Task Title"
-              value={newTask.title}
-              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-            />
-            <Input
-              placeholder="Task Description"
-              value={newTask.description}
-              onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-            />
-            <select
-              value={newTask.assignedTo}
-              onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
-              className="border border-slate-300 rounded-lg px-3 py-2"
-            >
+            <Input placeholder="Task Title" />
+            <Input placeholder="Task Description" />
+            <select className="border border-slate-300 rounded-lg px-3 py-2">
               <option value="">Select Employee</option>
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
@@ -471,7 +372,7 @@ export default function AdminDashboard() {
             </select>
           </div>
 
-          <Button onClick={handleAssignTask} className="mt-4 flex items-center gap-2">
+          <Button className="mt-4 flex items-center gap-2">
             <PlusCircle className="w-4 h-4" /> Assign Task
           </Button>
         </CardContent>

@@ -1,10 +1,9 @@
-"use client";
+'use client';
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { ClipboardCheck, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { api } from "@/lib/api";
 import {
   Card,
   CardHeader,
@@ -48,14 +47,14 @@ export default function TasksPage() {
 
   const resolveEmployeeId = useCallback(async (): Promise<string | null> => {
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error("Supabase session error:", sessionError);
+      // prefer getUser to fetch auth user
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr) {
+        console.error("Supabase getUser error:", userErr);
         return null;
       }
-      const session = (sessionData as any)?.session;
-      if (!session) return null;
-      const userEmail = session.user?.email;
+      const user = (userData as any)?.user ?? null;
+      const userEmail = user?.email;
       if (!userEmail) return null;
 
       const { data: emp, error: empErr } = await supabase
@@ -90,20 +89,6 @@ export default function TasksPage() {
         }
 
         setEmployeeId(empId);
-        // Try backend API first
-        try {
-          const apiTasks = await api.listTasksForEmployee(String(empId));
-          if (Array.isArray(apiTasks)) {
-            setTasks(apiTasks as TaskRow[]);
-            return;
-          } else if (apiTasks?.tasks && Array.isArray(apiTasks.tasks)) {
-            setTasks(apiTasks.tasks as TaskRow[]);
-            return;
-          }
-        } catch (apiErr) {
-          // fallback to Supabase below
-          console.warn("Performance API tasks fetch failed:", apiErr);
-        }
 
         const { data, error } = await supabase
           .from("tasks")
@@ -131,9 +116,7 @@ export default function TasksPage() {
   );
 
   useEffect(() => {
-    // initial load
     void loadTasks();
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -147,7 +130,8 @@ export default function TasksPage() {
         { event: "*", schema: "public", table: "tasks", filter: `assigned_to=eq.${employeeId}` },
         (payload: any) => {
           try {
-            const rec = payload.record ?? payload.new;
+            // supabase v2 payload shape: record/new depending on event
+            const rec = payload.record ?? payload.new ?? payload.data ?? null;
             if (!rec) return;
 
             const eventType = payload.eventType ?? payload.event;
@@ -183,48 +167,25 @@ export default function TasksPage() {
 
     setTaskLoading(taskId, true);
     try {
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
-      if (userErr) console.error("Failed to get supabase user:", userErr);
+      const { data: userData } = await supabase.auth.getUser();
+      const user = (userData as any)?.user ?? null;
       const userId = user?.id ?? null;
 
       const payload: any = {
-        updated_by: userId, // must be a string UUID
+        task_id: taskId,
+        updated_by: userId,
         update_text: text || null,
         progress_percent: progress || null,
-        attached_url: null,
+        created_at: new Date().toISOString(),
       };
 
-      // try backend API first
-      try {
-        await api.updateTask(taskId, payload);
-        toast({ title: "Update sent to admin" });
-        setUpdateTexts((p) => ({ ...p, [taskId]: "" }));
-        setUpdateProgress((p) => ({ ...p, [taskId]: 0 }));
-        await loadTasks();
-        return;
-      } catch (apiErr) {
-        console.warn("api.updateTask failed; falling back to Supabase insert:", apiErr);
-      }
-
-      // fallback: insert into Supabase directly
-      const { error: insertErr } = await supabase.from("task_updates").insert([
-        {
-          task_id: taskId,
-          updated_by: userId,
-          update_text: text || null,
-          progress_percent: progress || null,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      const { error: insertErr } = await supabase.from("task_updates").insert([payload]);
 
       if (insertErr) {
         console.error("Error inserting task update:", insertErr);
         toast({ title: "Error saving update", variant: "destructive" });
       } else {
-        toast({ title: "Progress updated (offline fallback)" });
+        toast({ title: "Progress updated" });
         setUpdateTexts((p) => ({ ...p, [taskId]: "" }));
         setUpdateProgress((p) => ({ ...p, [taskId]: 0 }));
         await loadTasks();
@@ -242,29 +203,7 @@ export default function TasksPage() {
     setTaskLoading(task.id, true);
 
     try {
-      // Preferred: notify backend API
-      try {
-        await api.updateTask(task.id, { status: "completed" });
-        // try to confirm via API if available
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const userId = user?.id ?? null;
-        try {
-          await api.confirmTask(task.id, { confirmer_id: userId, note: `Completed by employee` });
-        } catch (apiConfErr) {
-          // fallback confirm to Supabase below
-          console.warn("api.confirmTask failed:", apiConfErr);
-        }
-
-        toast({ title: "Task marked complete", description: "Admin notified" });
-        await loadTasks();
-        return;
-      } catch (apiErr) {
-        console.warn("api.updateTask failed; falling back to Supabase update:", apiErr);
-      }
-
-      // Fallback: update task row in Supabase
+      // update task row in Supabase
       const { error: upErr } = await supabase
         .from("tasks")
         .update({
@@ -279,10 +218,9 @@ export default function TasksPage() {
         throw upErr;
       }
 
-      // Insert into task_confirmations
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Insert into task_confirmations to notify admin
+      const { data: userData } = await supabase.auth.getUser();
+      const user = (userData as any)?.user ?? null;
       const userId = user?.id ?? null;
 
       const { error: confErr } = await supabase.from("task_confirmations").insert([

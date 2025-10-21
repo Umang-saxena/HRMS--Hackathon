@@ -1,14 +1,19 @@
 # app/payroll/services.py
 from decimal import Decimal, getcontext, ROUND_HALF_UP
 from typing import Dict, Any, Optional, List
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+import json
+import logging
 
 from app.supabase_client import supabase
 from app.payroll.utils import safe_eval
 
 getcontext().prec = 28
+_logger = logging.getLogger(__name__)
 
-# helper to normalize supabase.execute() response
+# -------------------------
+# Helper utilities
+# -------------------------
 def _extract_data(res):
     """
     Normalise the result from supabase `execute()` which may be:
@@ -38,7 +43,6 @@ def _extract_data(res):
         pass
     return None
 
-
 def _to_decimal(x) -> Decimal:
     if x is None:
         return Decimal("0.00")
@@ -62,11 +66,10 @@ def fetch_all(table: str, filters: Optional[List[tuple]] = None):
         return []
     return data
 
-
 # -------------------------
 # Load catalog and overrides
 # -------------------------
-def load_employee_structure(employee_id: int):
+def load_employee_structure(employee_id: Any):
     catalog = fetch_all('salary_components')
     catalog_map = {c['code']: c for c in catalog}
     overrides = fetch_all('employee_salary_components', [('employee_id','eq', employee_id)])
@@ -91,25 +94,27 @@ def load_employee_structure(employee_id: int):
         }
     return comp_map
 
-def get_employee_annual_ctc(employee_id: int) -> Decimal:
+def get_employee_annual_ctc(employee_id: Any) -> Decimal:
     res = supabase.table('employee_salary_assignments').select('*')\
         .eq('employee_id', employee_id).order('effective_from', desc=True).limit(1).execute()
-    if res.status_code == 200 and res.data:
-        assign = res.data[0]
+    data = _extract_data(res)
+    if res and getattr(res, 'status_code', None) == 200 and data:
+        assign = data[0]
         if assign.get('custom_annual_ctc'):
             return _to_decimal(assign['custom_annual_ctc'])
         if assign.get('grade_id'):
             g = supabase.table('employee_grades').select('*').eq('id', assign['grade_id']).single().execute()
-            if g.status_code == 200 and g.data:
+            if g and getattr(g, 'status_code', None) == 200 and getattr(g, 'data', None):
                 return _to_decimal(g.data.get('annual_ctc'))
     return Decimal('0.00')
 
-def get_active_bonuses_for_period(employee_id: int, period_start: date, period_end: date):
+def get_active_bonuses_for_period(employee_id: Any, period_start: date, period_end: date):
     resp = supabase.table('employee_bonuses').select('*').eq('employee_id', employee_id).execute()
-    if resp.status_code != 200:
+    if not resp or getattr(resp, 'status_code', None) != 200:
         return []
-    bonuses = []
-    for b in resp.data:
+    bonuses = _extract_data(resp) or []
+    result = []
+    for b in bonuses:
         ef = b.get('effective_from')
         et = b.get('effective_to')
         ef_date = None
@@ -137,8 +142,8 @@ def get_active_bonuses_for_period(employee_id: int, period_start: date, period_e
                 if et_date and et_date < period_start:
                     include = False
         if include:
-            bonuses.append(b)
-    return bonuses
+            result.append(b)
+    return result
 
 # -------------------------
 # Tax helpers (data-driven)
@@ -177,16 +182,16 @@ def compute_annual_tax_from_slabs(taxable_income: Decimal, slabs: List[Dict[str,
 # -------------------------
 # Main compute function(s)
 # -------------------------
-def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Optional[Dict[str,int]] = None, regime: str = 'new') -> Dict[str, Any]:
+def compute_payslip(employee_id: Any, payroll_period_id: int, attendance: Optional[Dict[str,int]] = None, regime: str = 'new') -> Dict[str, Any]:
     if attendance is None:
         attendance = {}
     emp_res = supabase.table('employees').select('*').eq('id', employee_id).single().execute()
-    if emp_res.status_code != 200 or not emp_res.data:
+    if not emp_res or getattr(emp_res, 'status_code', None) != 200 or not getattr(emp_res, 'data', None):
         raise RuntimeError('Employee not found')
     employee = emp_res.data
 
     period_res = supabase.table('payroll_periods').select('*').eq('id', payroll_period_id).single().execute()
-    if period_res.status_code != 200 or not period_res.data:
+    if not period_res or getattr(period_res, 'status_code', None) != 200 or not getattr(period_res, 'data', None):
         raise RuntimeError('Payroll period not found')
     period = period_res.data
     period_start = period['period_start'] if isinstance(period['period_start'], date) else datetime.strptime(str(period['period_start'])[:10], '%Y-%m-%d').date()
@@ -225,6 +230,7 @@ def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Option
             amt = (base_amt * pct) / Decimal('100')
         elif method == 'FORMULA':
             expr = val
+            # Replace tokens carefully so longer tokens match first
             for token in sorted(comp_map.keys(), key=lambda x: -len(x)):
                 if token in expr:
                     token_val = compute_component(token, seen)
@@ -244,6 +250,7 @@ def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Option
         except Exception:
             computed_cache[code] = Decimal('0.00')
 
+    # Include active bonuses
     bonuses = get_active_bonuses_for_period(employee_id, period_start, period_end)
     for b in bonuses:
         if b.get('is_percentage'):
@@ -260,6 +267,7 @@ def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Option
         }
         computed_cache[code] = bonus_amt
 
+    # Proration based on attendance
     wd = attendance.get('working_days', 0)
     pd = attendance.get('present_days', wd)
     proration = Decimal('1.0')
@@ -292,7 +300,7 @@ def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Option
     state = employee.get('work_state')
     if state:
         ptrs = supabase.table('professional_tax_rules').select('*').eq('state_code', state).execute()
-        if ptrs.status_code == 200 and ptrs.data:
+        if ptrs and getattr(ptrs, 'status_code', None) == 200 and getattr(ptrs, 'data', None):
             for p in ptrs.data:
                 min_s = _to_decimal(p.get('min_monthly_salary') or 0)
                 max_s = _to_decimal(p.get('max_monthly_salary') or 999999999)
@@ -320,31 +328,123 @@ def compute_payslip(employee_id: int, payroll_period_id: int, attendance: Option
         'net_salary': float(net),
         'total_employer_cost': float(total_employer_cost),
         'breakdown': breakdown,
-        'computed_at': datetime.utcnow().isoformat()
+        'computed_at': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
     }
 
     return payslip
 
+# -------------------------
+# Persist payslip -> your existing `payroll` table
+# -------------------------
 def persist_payslip(payslip: dict) -> dict:
-    data = {
-        'employee_id': payslip['employee_id'],
-        'payroll_period_id': payslip['payroll_period_id'],
-        'gross_salary': payslip['gross_salary'],
-        'total_deductions': payslip['total_deductions'],
-        'net_salary': payslip['net_salary'],
-        'total_employer_cost': payslip['total_employer_cost'],
-        'breakdown': payslip['breakdown']
-    }
-    res = supabase.table('payslips').insert(data).execute()
-    if res.status_code not in (200, 201):
-        raise RuntimeError('Failed to persist payslip: ' + str(res.data))
-    return res.data[0]
+    """
+    Persist to the existing `payroll` table.
+    Expects `payslip` format returned by compute_payslip.
+    Uses upsert if available, otherwise fallback to insert/update.
+    """
+    emp_id = payslip.get('employee_id')
+    payroll_period_id = payslip.get('payroll_period_id')
+    gross = _to_decimal(payslip.get('gross_salary', 0))
+    total_deductions = _to_decimal(payslip.get('total_deductions', 0))
+    net = _to_decimal(payslip.get('net_salary', 0))
+    total_employer_cost = _to_decimal(payslip.get('total_employer_cost', 0))
+    breakdown = payslip.get('breakdown', {})
 
+    # Try to determine a base_salary if BASIC present, otherwise fallback to gross
+    base_salary = Decimal('0.00')
+    try:
+        if isinstance(breakdown, dict) and 'BASIC' in breakdown:
+            b = breakdown['BASIC']
+            base_salary = _to_decimal(b.get('amount') if isinstance(b, dict) else b)
+        else:
+            base_salary = gross
+    except Exception:
+        base_salary = gross
+
+    allowances = (gross - base_salary).quantize(Decimal('0.01'))
+    now_iso = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+
+    data = {
+        'employee_id': emp_id,
+        'payroll_period_id': payroll_period_id,
+        # keep `month` untouched unless you choose to populate it from payroll_periods
+        'base_salary': float(base_salary),
+        'allowances': float(allowances),
+        'deductions': float(total_deductions),
+        'net_salary': float(net),
+        'gross_salary': float(gross),
+        'total_deductions': float(total_deductions),
+        'total_employer_cost': float(total_employer_cost),
+        'breakdown': breakdown,
+        'payment_status': 'PENDING',
+        'created_at': now_iso,
+        'updated_at': now_iso,
+        'status': 'DRAFT'
+    }
+
+    # If payroll_period_id present, attempt to fill month from payroll_periods.period_start (optional)
+    if payroll_period_id:
+        try:
+            pr = supabase.table('payroll_periods').select('period_start').eq('id', payroll_period_id).single().execute()
+            if pr and getattr(pr, 'status_code', None) == 200 and getattr(pr, 'data', None):
+                period_start = pr.data.get('period_start')
+                if period_start:
+                    # store period_start into month field (your payroll.month is date)
+                    data['month'] = period_start
+        except Exception:
+            pass
+
+    # Attempt upsert. Many supabase python clients have upsert(), some use insert(...).on_conflict.
+    try:
+        # prefer .upsert if available
+        upsert_fn = getattr(supabase.table('payroll'), 'upsert', None)
+        if upsert_fn:
+            # on_conflict should match the unique constraint you created (employee_id, payroll_period_id)
+            res = supabase.table('payroll').upsert(data, on_conflict=['employee_id', 'payroll_period_id']).execute()
+        else:
+            # fallback: try insert, handle duplicate error by update
+            res = supabase.table('payroll').insert(data).execute()
+    except Exception as exc:
+        _logger.debug("Upsert via client failed: %s. Falling back to check+insert/update.", exc)
+        # fallback check existing
+        existing = supabase.table('payroll').select('*')\
+            .eq('employee_id', emp_id).eq('payroll_period_id', payroll_period_id).limit(1).execute()
+        ext = _extract_data(existing)
+        if ext and len(ext) > 0:
+            existing_id = ext[0]['id']
+            res = supabase.table('payroll').update(data).eq('id', existing_id).execute()
+        else:
+            res = supabase.table('payroll').insert(data).execute()
+
+    # Validate response
+    if not res:
+        raise RuntimeError('Failed to persist payslip: no response from DB')
+    status_code = getattr(res, 'status_code', None)
+    if status_code not in (200, 201):
+        # try to include data for debugging
+        raise RuntimeError(f'Failed to persist payslip: status={status_code} data={getattr(res, "data", str(res))}')
+
+    out = _extract_data(res)
+    if isinstance(out, list) and out:
+        return out[0]
+    return out or {}
+
+# -------------------------
+# Run payroll for a period (bulk)
+# -------------------------
 def run_payroll_for_period(payroll_period_id: int, run_by: Optional[str] = None) -> Dict[str, Any]:
-    run_res = supabase.table('payroll_runs').insert({'payroll_period_id': payroll_period_id, 'run_by': run_by}).execute()
-    if run_res.status_code not in (200, 201):
+    started_at = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+    run_insert = {
+        'payroll_period_id': payroll_period_id,
+        'run_by': run_by,
+        'status': 'IN_PROGRESS',
+        'started_at': started_at
+    }
+    run_res = supabase.table('payroll_runs').insert(run_insert).execute()
+    if not run_res or getattr(run_res, 'status_code', None) not in (200, 201):
         raise RuntimeError('Failed to create payroll run')
-    run = run_res.data[0]
+    run = _extract_data(run_res)[0]
+
     emps = fetch_all('employees', [('is_active','eq', True)])
     results = {'total': len(emps), 'succeeded': 0, 'failed': 0, 'errors': []}
     for e in emps:
@@ -353,7 +453,10 @@ def run_payroll_for_period(payroll_period_id: int, run_by: Optional[str] = None)
             persist_payslip(payslip)
             results['succeeded'] += 1
         except Exception as ex:
+            _logger.exception("Failed to compute/persist for employee %s: %s", e.get('id'), ex)
             results['failed'] += 1
-            results['errors'].append({'employee_id': e['id'], 'error': str(ex)})
-    supabase.table('payroll_runs').update({'status': 'COMPLETED'}).eq('id', run['id']).execute()
+            results['errors'].append({'employee_id': e.get('id'), 'error': str(ex)})
+
+    completed_at = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+    supabase.table('payroll_runs').update({'status': 'COMPLETED', 'completed_at': completed_at}).eq('id', run['id']).execute()
     return results
