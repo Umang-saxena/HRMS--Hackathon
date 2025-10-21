@@ -14,7 +14,8 @@ import {
   Clock,
   Sun,
   DollarSign,
-  Umbrella
+  Umbrella,
+  Star
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Header from './Header';
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Payroll', href: '/employee/payroll', icon: DollarSign },
   { name: 'Task', href: '/employee/task', icon: FileText },
   { name: 'Leaves', href: '/employee/leaves', icon: Umbrella },
+  { name: 'Company review', href: '/employee/reviews', icon: Star },
   
 ];
 

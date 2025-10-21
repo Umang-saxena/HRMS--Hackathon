@@ -1,8 +1,7 @@
-// app/admin/employee/page.tsx
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Edit, Trash, User, Mail, Building2, UploadCloud, DownloadCloud, Plus } from 'lucide-react';
+import { Edit, Trash, Search, User, Mail, Building2, UploadCloud, DownloadCloud, Plus, ArrowUpRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,14 +24,8 @@ type Employee = {
   created_at?: string | null;
 };
 
-type Department = {
-  id: string;
-  name: string;
-};
-
 export default function AdminEmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [filtered, setFiltered] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -54,7 +47,7 @@ export default function AdminEmployeesPage() {
   }, [filtered, page]);
 
   useEffect(() => {
-    void loadAll();
+    loadEmployees();
   }, []);
 
   useEffect(() => {
@@ -62,25 +55,17 @@ export default function AdminEmployeesPage() {
     setPage(1);
   }, [employees, search]);
 
-  async function loadAll() {
+  async function loadEmployees() {
     setLoading(true);
     try {
-      const [empRes, deptRes] = await Promise.all([
-        supabase.from('employees').select('*').order('created_at', { ascending: false }),
-        supabase.from('departments').select('*').order('name', { ascending: true }),
-      ]);
-
-      if (empRes.error) throw empRes.error;
-      if (deptRes.error) throw deptRes.error;
-
-      setEmployees((empRes.data || []) as Employee[]);
-      setFiltered((empRes.data || []) as Employee[]);
-      setDepartments((deptRes.data || []) as Department[]);
+      const { data, error } = await supabase.from('employees').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setEmployees(data || []);
+      setFiltered(data || []);
     } catch (err: any) {
-      console.error('Error loading employees/departments:', err);
-      toast({ title: 'Failed to load data', variant: 'destructive' });
+      console.error('Error loading employees:', err);
+      toast({ title: 'Failed to load employees', variant: 'destructive' });
       setEmployees([]);
-      setDepartments([]);
       setFiltered([]);
     } finally {
       setLoading(false);
@@ -98,16 +83,9 @@ export default function AdminEmployeesPage() {
         (e) =>
           `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
           (e.email || '').toLowerCase().includes(q) ||
-          (e.role || '').toLowerCase().includes(q) ||
-          (getDepartmentName(e.department_id) || '').toLowerCase().includes(q)
+          (e.role || '').toLowerCase().includes(q)
       )
     );
-  }
-
-  function getDepartmentName(deptId?: string | null) {
-    if (!deptId) return null;
-    const d = departments.find((x) => x.id === deptId);
-    return d?.name ?? null;
   }
 
   function openEdit(emp: Employee) {
@@ -121,7 +99,6 @@ export default function AdminEmployeesPage() {
       date_of_joining: emp.date_of_joining ?? '',
       salary: emp.salary ?? '',
       employment_status: emp.employment_status ?? '',
-      department_id: emp.department_id ?? null,
     });
   }
 
@@ -142,7 +119,6 @@ export default function AdminEmployeesPage() {
         date_of_joining: editData.date_of_joining,
         salary: editData.salary,
         employment_status: editData.employment_status,
-        department_id: editData.department_id ?? null,
       };
 
       const { error } = await supabase.from('employees').update(updates).eq('id', editing.id);
@@ -150,7 +126,7 @@ export default function AdminEmployeesPage() {
 
       toast({ title: 'Employee updated' });
       closeEdit();
-      await loadAll();
+      await loadEmployees();
     } catch (err) {
       console.error('Update error:', err);
       toast({ title: 'Failed to update employee', variant: 'destructive' });
@@ -167,7 +143,7 @@ export default function AdminEmployeesPage() {
       const { error } = await supabase.from('employees').delete().eq('id', emp.id);
       if (error) throw error;
       toast({ title: 'Employee deleted' });
-      await loadAll();
+      await loadEmployees();
     } catch (err) {
       console.error('Delete error:', err);
       toast({ title: 'Failed to delete employee', variant: 'destructive' });
@@ -198,14 +174,14 @@ export default function AdminEmployeesPage() {
       toast({ title: 'Employee created' });
       setCreateData({});
       setShowCreate(false);
-      await loadAll();
+      await loadEmployees();
     } catch (err) {
       console.error('Create error:', err);
       toast({ title: 'Failed to create employee', variant: 'destructive' });
     }
   }
 
-  // CSV parsing (very simple parser; assumes header row and comma-separated)
+  // CSV parsing etc. (kept same as before)
   function parseCSV(text: string) {
     const lines = text.split(/\r?\n/).filter(Boolean);
     if (lines.length < 1) return { headers: [], rows: [] };
@@ -221,7 +197,6 @@ export default function AdminEmployeesPage() {
     return { headers, rows };
   }
 
-  // Bulk import CSV: maps department by name if present (department_name column)
   async function handleCSVFile(file: File | null) {
     if (!file) return;
     setImporting(true);
@@ -234,28 +209,17 @@ export default function AdminEmployeesPage() {
         return;
       }
 
-      // Map CSV rows to DB columns - best-effort mapping
-      const mapped = rows.map((r) => {
-        // map department_name -> department_id if possible
-        let deptId: string | null = null;
-        const deptName = r['department_name'] || r['department'] || r['Department'] || '';
-        if (deptName) {
-          const found = departments.find((d) => d.name.toLowerCase() === deptName.toString().trim().toLowerCase());
-          if (found) deptId = found.id;
-        }
-
-        return {
-          first_name: r['first_name'] || r['firstname'] || r['FirstName'] || '',
-          last_name: r['last_name'] || r['lastname'] || r['LastName'] || '',
-          email: r['email'] || r['Email'] || '',
-          phone: r['phone'] || r['Phone'] || null,
-          role: r['role'] || r['Role'] || null,
-          date_of_joining: r['date_of_joining'] || r['dateOfJoining'] || null,
-          salary: r['salary'] ? Number(r['salary']) : null,
-          employment_status: r['employment_status'] || r['status'] || 'active',
-          department_id: deptId,
-        };
-      });
+      const mapped = rows.map((r) => ({
+        first_name: r['first_name'] || r['firstname'] || r['FirstName'] || '',
+        last_name: r['last_name'] || r['lastname'] || r['LastName'] || '',
+        email: r['email'] || r['Email'] || '',
+        phone: r['phone'] || r['Phone'] || null,
+        role: r['role'] || r['Role'] || null,
+        date_of_joining: r['date_of_joining'] || r['dateOfJoining'] || null,
+        salary: r['salary'] ? Number(r['salary']) : null,
+        employment_status: r['employment_status'] || r['status'] || 'active',
+        department_id: r['department_id'] || null,
+      }));
 
       const invalid = mapped.filter((m) => !m.email || !m.first_name || !m.last_name);
       if (invalid.length) {
@@ -270,7 +234,6 @@ export default function AdminEmployeesPage() {
         return;
       }
 
-      // Insert in batches
       const batchSize = 100;
       for (let i = 0; i < toInsert.length; i += batchSize) {
         const batch = toInsert.slice(i, i + batchSize);
@@ -284,7 +247,7 @@ export default function AdminEmployeesPage() {
       }
 
       toast({ title: `Imported ${toInsert.length} employees` });
-      await loadAll();
+      await loadEmployees();
     } catch (err) {
       console.error('CSV import error:', err);
       toast({ title: 'Failed to import CSV', variant: 'destructive' });
@@ -293,23 +256,17 @@ export default function AdminEmployeesPage() {
     }
   }
 
-  // Export visible employees to CSV (filtered)
   function exportToCSV(rows: Employee[]) {
     if (!rows.length) {
       toast({ title: 'No rows to export', variant: 'destructive' });
       return;
     }
-    const headers = ['id', 'first_name', 'last_name', 'email', 'phone', 'role', 'department', 'date_of_joining', 'salary', 'employment_status', 'created_at'];
+    const headers = ['id', 'first_name', 'last_name', 'email', 'phone', 'role', 'date_of_joining', 'salary', 'employment_status', 'created_at'];
     const csv = [
       headers.join(','),
       ...rows.map((r) =>
         headers
           .map((h) => {
-            if (h === 'department') {
-              const dept = getDepartmentName(r.department_id) ?? '';
-              const s = String(dept).replace(/"/g, '""');
-              return s.includes(',') || s.includes('\n') ? `"${s}"` : s;
-            }
             const val = (r as any)[h];
             if (val == null) return '';
             const s = String(val).replace(/"/g, '""');
@@ -328,6 +285,109 @@ export default function AdminEmployeesPage() {
     URL.revokeObjectURL(url);
   }
 
+  // -----------------------------
+  // Promote feature
+  // -----------------------------
+  async function resolveAdminEmployeeId(): Promise<string | null> {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authEmail = (sessionData as any)?.session?.user?.email ?? null;
+      if (!authEmail) return null;
+      const { data: empRow, error } = await supabase.from('employees').select('id').eq('email', authEmail).maybeSingle();
+      if (error) {
+        console.warn('Failed to resolve admin employees.id:', error);
+        return null;
+      }
+      return (empRow as any)?.id ?? null;
+    } catch (err) {
+      console.error('resolveAdminEmployeeId error:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Promote an employee:
+   * - asks for new role (required)
+   * - asks for promotion date (required)
+   * - optional salary hike percent (if provided, updates employees.salary)
+   * - logs the promotion into `promotions` table
+   */
+  async function handlePromote(emp: Employee) {
+    try {
+      const newRole = window.prompt('Enter new role/title for the employee', emp.role ?? '');
+      if (newRole === null) return; // cancelled
+      const trimmedRole = (newRole || '').trim();
+      if (!trimmedRole) {
+        toast({ title: 'Role required', variant: 'destructive' });
+        return;
+      }
+
+      const defaultDate = new Date().toISOString().slice(0, 10);
+      const promotionDate = window.prompt('Promotion date (YYYY-MM-DD)', defaultDate);
+      if (promotionDate === null) return; // cancelled
+      const dateStr = (promotionDate || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        toast({ title: 'Invalid date format', description: 'Use YYYY-MM-DD', variant: 'destructive' });
+        return;
+      }
+
+      const percentStr = window.prompt('Salary hike percent (optional). Enter number like 10 for 10%', '');
+      if (percentStr === null) return; // cancelled
+      const percent = percentStr.trim() === '' ? null : Number(percentStr.trim());
+      if (percent !== null && (isNaN(percent) || percent < 0)) {
+        toast({ title: 'Invalid percent', variant: 'destructive' });
+        return;
+      }
+
+      // compute salary change
+      const oldSalary = emp.salary ? Number(emp.salary as any) : 0;
+      const newSalary = percent !== null ? Math.round((oldSalary * (1 + percent / 100)) * 100) / 100 : oldSalary;
+
+      // attempt to resolve admin employee id for promoted_by
+      const promotedBy = await resolveAdminEmployeeId();
+
+      // Begin update: update employees table and insert promotion log
+      // Update employees row (role + salary if percent provided)
+      const updates: any = { role: trimmedRole };
+      if (percent !== null) updates.salary = newSalary;
+
+      const { error: updateErr } = await supabase.from('employees').update(updates).eq('id', emp.id);
+      if (updateErr) throw updateErr;
+
+      // Insert log into promotions table
+      const promoRow = {
+        employee_id: emp.id,
+        promoted_by: promotedBy,
+        old_role: emp.role ?? null,
+        new_role: trimmedRole,
+        old_salary: oldSalary || null,
+        new_salary: percent !== null ? newSalary : null,
+        percent_increase: percent !== null ? percent : null,
+        promotion_date: dateStr,
+      };
+
+      const { error: promoErr } = await supabase.from('promotions').insert([promoRow]);
+      if (promoErr) {
+        // Promotion log failed — we still updated employee; report but continue
+        console.error('Promotions insert error:', promoErr);
+        // option A — neutral default toast
+      toast({ title: 'Promoted (but failed to log)', description: promoErr.message || '', variant: 'default' });
+
+      } else {
+        toast({ title: 'Employee promoted' });
+      }
+
+      // reload
+      await loadEmployees();
+    } catch (err: any) {
+      console.error('Promote error:', err);
+      toast({ title: 'Failed to promote', description: err?.message ?? String(err), variant: 'destructive' });
+    }
+  }
+
+  // -----------------------------
+  // UI rendering (kept largely same)
+  // -----------------------------
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -376,20 +436,8 @@ export default function AdminEmployeesPage() {
               <Input type="date" placeholder="Date of joining" value={createData.date_of_joining || ''} onChange={(e) => setCreateData((p) => ({ ...p, date_of_joining: e.target.value }))} />
               <Input placeholder="Salary" value={String(createData.salary ?? '')} onChange={(e) => setCreateData((p) => ({ ...p, salary: e.target.value }))} />
               <Input placeholder="Employment status" value={createData.employment_status || ''} onChange={(e) => setCreateData((p) => ({ ...p, employment_status: e.target.value }))} />
-              {/* Department select */}
-              <div>
-                <label className="text-xs font-medium text-slate-600">Department</label>
-                <select
-                  value={createData.department_id ?? ''}
-                  onChange={(e) => setCreateData((p) => ({ ...p, department_id: e.target.value || null }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">-- Select department --</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* department_id optional input (if you store department ids elsewhere replace with select) */}
+              <Input placeholder="Department ID (optional)" value={createData.department_id || ''} onChange={(e) => setCreateData((p) => ({ ...p, department_id: e.target.value }))} />
             </div>
 
             <div className="flex gap-2 mt-4">
@@ -403,7 +451,7 @@ export default function AdminEmployeesPage() {
       {/* Search & Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Input placeholder="Search by name, email, role, department..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md" />
+          <Input placeholder="Search by name, email, role..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-md" />
         </div>
 
         <div className="text-sm text-slate-600">
@@ -435,13 +483,18 @@ export default function AdminEmployeesPage() {
                       <div className="text-xs text-slate-600 flex items-center gap-3">
                         <Mail className="w-3 h-3" /> {e.email}
                         <Building2 className="w-3 h-3 ml-2" /> <span className="capitalize">{e.role || '—'}</span>
-                        <span className="ml-2 text-xs text-slate-500">• {getDepartmentName(e.department_id) ?? 'No dept'}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="capitalize">{e.employment_status || 'active'}</Badge>
+
+                    {/* PROMOTE BUTTON */}
+                    <Button variant="outline" onClick={() => handlePromote(e)} title="Promote employee" className="flex items-center gap-2">
+                      <ArrowUpRight className="w-4 h-4" /> Promote
+                    </Button>
+
                     <Button variant="ghost" onClick={() => openEdit(e)} title="Edit"><Edit className="w-4 h-4" /></Button>
                     <Button variant="ghost" onClick={() => handleDelete(e)} title="Delete" className="text-red-600"><Trash className="w-4 h-4" /></Button>
                   </div>
@@ -499,20 +552,6 @@ export default function AdminEmployeesPage() {
               <div>
                 <label className="text-xs font-medium text-slate-600">Salary</label>
                 <Input value={String(editData.salary || '')} onChange={(e) => setEditData((p) => ({ ...p, salary: e.target.value }))} />
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-600">Department</label>
-                <select
-                  value={editData.department_id ?? ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, department_id: e.target.value || null }))}
-                  className="w-full border rounded px-2 py-2"
-                >
-                  <option value="">-- Select department --</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
               </div>
             </div>
 
