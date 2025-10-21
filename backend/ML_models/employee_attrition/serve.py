@@ -19,6 +19,5 @@ def predict_attrition(employee: dict):
     pred = int(proba >= threshold)
     return {
         "attrition_probability": float(proba),
-        "attrition_prediction": pred,
-        "threshold_used": threshold
+        "attrition_prediction": pred
     }

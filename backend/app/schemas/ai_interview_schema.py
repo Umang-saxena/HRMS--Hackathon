@@ -11,7 +11,7 @@ class Message(BaseModel):
 class ConversationRequest(BaseModel):
     job_description: str
     resume_text: str
-    history: List[Message] # Use the Message schema for history items
+    history: List[Message] 
 
 # Schema for the /start-analysis endpoint request body
 class AnalysisRequest(BaseModel):

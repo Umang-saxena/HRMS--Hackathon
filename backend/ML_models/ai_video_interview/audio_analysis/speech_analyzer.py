@@ -4,7 +4,7 @@ import torch                                        # PyTorch is still needed fo
 import librosa                                      # Used to get total audio duration
 from .filler_detector import count_filler_words      # Your existing filler word detector
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
-from ML_models.ai_video_interview.utils import transcription_utils
+from ..utils import transcription_utils
 from dotenv import load_dotenv
 
 load_dotenv()

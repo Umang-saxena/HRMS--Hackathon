@@ -5,12 +5,12 @@ url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase: Client = create_client(url, key)
 
-BUCKET_NAME = "resumes_and_interviews" # The name of the bucket you created in Supabase
+BUCKET_NAME = "resumes_and_interviews" 
 
 def upload_file(file_path: str, destination_name: str) -> str:
     """Uploads a file to the Supabase storage bucket."""
     try:
-        with open(file_path, 'rb') as f: # Open file in binary read mode
+        with open(file_path, 'rb') as f: 
             supabase.storage.from_(BUCKET_NAME).upload(destination_name, f) # Upload the file
         
     
