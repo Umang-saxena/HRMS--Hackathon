@@ -27,7 +27,7 @@ services:
     volumes:
       - .:/app
     command: >
-      celery -A celery_worker worker --loglevel=info
+      celery -A ML_models.ai_video_interview.utils.queue_utils.celery_app worker --loglevel=info -P solo
     networks:
       - app-network
 
