@@ -19,6 +19,14 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import StatsCard from '@/components/hr/StatsCard';
 
+type Prediction = {
+  score: number;
+  prediction: number; // 0/1
+  label?: string;
+  reason?: any;
+  updated_at?: string | null;
+} | null;
+
 type Employee = {
   id: string;
   first_name: string;
@@ -26,6 +34,7 @@ type Employee = {
   role?: string | null;
   email?: string | null;
   salary?: number | null; // yearly gross
+  prediction?: Prediction; // added
 };
 
 type AttendanceRow = {
@@ -85,33 +94,78 @@ export default function AdminDashboard() {
   async function loadAdminDashboard() {
     setLoading(true);
     try {
-      // Fetch employees, payroll (we'll compute monthly payroll from employees.salary), performance_reviews(not used directly), recent attendance
+      // 1) Fetch employees + predictions in a single call (combined API)
+      //    API returns rows like { id, name, role, email, prediction: {score,label,reason,updated_at} | null }
+      const employeesResp = await fetch('/api/admin/employees-with-predictions');
+      let employeesJson: any[] = [];
+      if (employeesResp.ok) {
+        employeesJson = await employeesResp.json();
+      } else {
+        // fallback: if combined API fails, try Supabase employees query (graceful)
+        console.warn('employees-with-predictions API failed, falling back to supabase.employees');
+        const { data: employeesData, error: empErr } = await supabase.from('employees').select('id,first_name,last_name,role,salary,email');
+        if (empErr) console.error('employees fetch error fallback', empErr);
+        employeesJson = (employeesData ?? []).map((e: any) => ({
+          id: e.id,
+          name: `${e.first_name ?? ''} ${e.last_name ?? ''}`.trim(),
+          role: e.role,
+          email: e.email,
+          prediction: null,
+        }));
+      }
+
+      // map API rows -> Employee[] with first_name/last_name
+      const employeesArr: Employee[] = (employeesJson ?? []).map((r: any) => {
+        const fullName = (r.name ?? '').trim();
+        const [first, ...rest] = fullName ? fullName.split(' ') : ['', ''];
+        const last = rest.join(' ') || '';
+        return {
+          id: String(r.id),
+          first_name: first || '',
+          last_name: last || '',
+          role: r.role ?? null,
+          email: r.email ?? null,
+          salary: undefined,
+          prediction: r.prediction ?? null,
+        };
+      });
+
+      // 2) Other parallel queries: recent attendance, performance_scores (same as before)
       const [
-        { data: employeesData, error: empErr },
         { data: attendanceRecentData, error: attErr },
         { data: perfRowsData, error: perfErr },
       ] = await Promise.all([
-        supabase.from('employees').select('id,first_name,last_name,role,salary'),
         supabase.from('attendance').select('*').order('date', { ascending: false }).limit(10),
         supabase.from('performance_scores').select('*').order('updated_at', { ascending: false }).limit(500),
       ]);
 
-      if (empErr) console.error('employees fetch error', empErr);
       if (attErr) console.error('recent attendance fetch error', attErr);
       if (perfErr) console.error('performance_scores fetch error', perfErr);
 
-      const employeesArr = (employeesData ?? []) as Employee[];
       const attendanceArr = (attendanceRecentData ?? []) as AttendanceRow[];
       const perfRows = (perfRowsData ?? []) as PerfRow[];
 
-      // compute HR count
+      // compute HR count & monthly payroll (if needed we can fetch salary separately)
       const hrs = employeesArr.filter((e) => (e.role ?? '').toLowerCase() === 'hr').length;
 
-      // compute monthly payroll: sum( (salary || 0) / 12 )
-      const monthlyPayrollSum = employeesArr.reduce((acc, e) => {
-        const yearly = Number(e.salary ?? 0) || 0;
-        return acc + yearly / 12;
-      }, 0);
+      // compute monthly payroll: try to get salary from employees table (this requires a supabase fetch)
+      // We'll fetch only if there are employees and we didn't get salary in combined API
+      let monthlyPayrollSum = 0;
+      try {
+        const { data: employeesWithSalary } = await supabase
+          .from('employees')
+          .select('id,salary')
+          .in('id', employeesArr.map((e) => e.id));
+        if (employeesWithSalary) {
+          const salaryMap = new Map<string, number>();
+          for (const row of employeesWithSalary) {
+            salaryMap.set(String(row.id), Number(row.salary ?? 0));
+          }
+          monthlyPayrollSum = employeesArr.reduce((acc, e) => acc + ((salaryMap.get(e.id) ?? 0) / 12 || 0), 0);
+        }
+      } catch (e) {
+        console.warn('salary fetch failed', e);
+      }
 
       // attendance summary
       const today = todayIso();
@@ -230,6 +284,16 @@ export default function AdminDashboard() {
     }
   }
 
+  // Helper to format date strings
+  function formatDate(dt?: string | null) {
+    if (!dt) return '—';
+    try {
+      return new Date(dt).toLocaleString();
+    } catch {
+      return dt;
+    }
+  }
+
   return (
     <div className="space-y-6 p-4">
       <div>
@@ -237,7 +301,7 @@ export default function AdminDashboard() {
         <p className="text-slate-600 mt-1">Company-wide overview and management</p>
       </div>
 
-      {/* Stats Overview (removed small performance card) */}
+      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
           <StatsCard title="Total Employees" value={stats.totalEmployees} icon={Users} iconColor="text-blue-600" />
@@ -248,7 +312,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="col-span-1 md:col-span-1 lg:col-span-1">
-          {/* Monthly Payroll card (sum of all monthly salaries) */}
+          {/* Monthly Payroll card */}
           <StatsCard
             title="Monthly Payroll"
             value={`₹${Number(stats.monthlyPayroll ?? 0).toFixed(2)}`}
@@ -298,7 +362,7 @@ export default function AdminDashboard() {
               <p className="text-sm text-slate-500 text-center py-8">No recent performance data for this week.</p>
             ) : (
               <div className="space-y-3">
-                {topPerformersWeek.map((p, idx) => (
+                {topPerformersWeek.map((p) => (
                   <div key={p.id} className="flex justify-between items-center border rounded-lg p-3 hover:bg-slate-50">
                     <div>
                       <p className="font-semibold text-slate-900">{p.name}</p>
@@ -349,6 +413,72 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Employee Attrition Cards (NEW) */}
+      <Card className="border-slate-200">
+        <CardHeader>
+          <CardTitle>Employee Attrition — Risk Overview</CardTitle>
+          <CardDescription>Predicted attrition risk per employee (from model)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {employees.length === 0 ? (
+              <div className="col-span-full text-gray-500">No employees loaded.</div>
+            ) : (
+              employees.map((emp) => {
+                const pred = emp.prediction;
+                const score = pred?.score ?? 0;
+                const label = pred?.label ?? 'unknown';
+                const showWarning = pred ? score >= 0.5 : false;
+                return (
+                  <div key={emp.id} className="bg-white rounded-lg p-4 border shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-semibold">{emp.first_name} {emp.last_name}</div>
+                        <div className="text-xs text-gray-500">{emp.role ?? '—'}</div>
+                        {emp.email && <div className="text-xs text-gray-400">{emp.email}</div>}
+                      </div>
+
+                      <div>
+                        {pred ? (
+                          showWarning ? (
+                            <div className="inline-flex items-center gap-2">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-500 text-white font-medium text-xs">
+                                ⚠️ {label.toUpperCase()}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs">OK</span>
+                          )
+                        ) : (
+                          <span className="text-xs text-gray-500">No prediction</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {pred && (
+                      <div className="mt-3 text-sm text-gray-700">
+                        <div className="flex items-center justify-between">
+                          <div><strong>Risk score:</strong> {pred.score.toFixed(3)}</div>
+                          <div className="text-xs text-gray-500">Updated: {formatDate(pred.updated_at)}</div>
+                        </div>
+                        {pred.reason && (
+                          <div className="mt-2 text-xs text-gray-600">
+                            <strong>Top reasons:</strong>{' '}
+                            {Array.isArray(pred.reason?.top_features)
+                              ? pred.reason.top_features.slice(0, 4).map((f: any) => `${f.feature} (${(f.importance ?? 0).toFixed(2)})`).join(', ')
+                              : JSON.stringify(pred.reason).slice(0, 200)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Assign Task Section */}
       <Card className="border-slate-200">

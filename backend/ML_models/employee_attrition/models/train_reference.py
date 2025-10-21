@@ -96,7 +96,9 @@ def main():
     scale_pos_weight = (y == 0).sum() / (y == 1).sum()
     model = build_model(preprocessor, scale_pos_weight)
     trained_model, best_threshold = train_and_find_best_threshold(model, X, y, optimize_for="f1")
-    joblib.dump({"model": trained_model, "threshold": best_threshold}, 'xgboost_attrition_with_threshold.joblib')
+    # inside train_reference.py (change save line)
+    joblib.dump({"model": trained_model, "threshold": best_threshold}, 'models/attrition.joblib')
+
     print(f"✅ Model and threshold saved (threshold={best_threshold})")
     plot_feature_importance(trained_model, numerical_features, categorical_features)
 
