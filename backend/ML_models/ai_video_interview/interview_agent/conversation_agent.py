@@ -1,8 +1,8 @@
-# ai_video_interview/interview_agent/conversation_agent.py
 import os                                         # To get environment variables
 from langchain_groq import ChatGroq               # Groq's fast LLM client
 from langchain_core.prompts import ChatPromptTemplate
-from prompt_templates import CONVERSATIONAL_PROMPT                 # Import your custom prompts
+
+from .prompt_templates import CONVERSATIONAL_PROMPT
 from dotenv import load_dotenv
 load_dotenv()
 
