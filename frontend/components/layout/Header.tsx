@@ -15,10 +15,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/components/AuthProvider';
 
 export default function Header() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -66,7 +68,10 @@ export default function Header() {
               <Avatar className="h-10 w-10">
                 <AvatarImage src="" alt="User" />
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white">
-                  AD
+                  {user?.user_metadata?.role === 'admin' && 'AD'}
+                  {user?.user_metadata?.role === 'hr' && 'HR'}
+                  {user?.user_metadata?.role === 'employee' && 'EM'}
+                  {user?.user_metadata?.role === 'candidate' && 'CD'}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -74,8 +79,13 @@ export default function Header() {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">Admin User</p>
-                <p className="text-xs leading-none text-slate-500">admin@hrml.ai</p>
+                <p className="text-sm font-medium leading-none">
+                  {user?.user_metadata?.role === 'admin' && 'Admin User'}
+                  {user?.user_metadata?.role === 'hr' && 'HR Manager'}
+                  {user?.user_metadata?.role === 'employee' && 'Employee'}
+                  {user?.user_metadata?.role === 'candidate' && 'Candidate'}
+                </p>
+                <p className="text-xs leading-none text-slate-500">{user?.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
