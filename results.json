@@ -1,0 +1,31 @@
+{
+    "status": "success",
+    "latency_seconds": 1.67,
+    "job_description_cached": true,
+    "top_candidates": [
+        {
+            "candidate_name": "MISHIKA GOYAL",
+            "match_score": "80",
+            "key_strengths": "PyTorch, Deep Learning, Data Preprocessing, CNNs, Transformers, Model Optimization, Python, TensorFlow, Scikit-Learn, Pandas, NumPy, Matplotlib, OpenCV",
+            "missing_skills": "MLOps, Cloud Deployment, Vector Databases, AI/ML in Production",
+            "summary": "AI/ML Engineer with experience in building deep learning models using PyTorch, strong knowledge of data preprocessing, and experience in leading teams on AI-driven projects.",
+            "rank": 1
+        },
+        {
+            "candidate_name": "Pratham Kothari",
+            "match_score": "80",
+            "key_strengths": [
+                "PyTorch",
+                "Data preprocessing",
+                "Model optimization"
+            ],
+            "missing_skills": [
+                "MLOps",
+                "Cloud deployment",
+                "Vector databases"
+            ],
+            "summary": "AI/ML Engineer with experience in building deep learning models using PyTorch and proficiency in data preprocessing.",
+            "rank": 2
+        }
+    ]
+}
